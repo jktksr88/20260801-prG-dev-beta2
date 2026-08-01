@@ -1,0 +1,2 @@
+import type { ReactNode } from 'react'
+export default function OptionCard({selected,onClick,title,body,icon}:{selected:boolean;onClick:()=>void;title:string;body?:string;icon?:ReactNode}){return <button type="button" className={`option-card ${selected?'selected':''}`} onClick={onClick}>{icon&&<span className="option-icon">{icon}</span>}<span><b>{title}</b>{body&&<small>{body}</small>}</span><i aria-hidden="true">{selected?'✓':''}</i></button>}

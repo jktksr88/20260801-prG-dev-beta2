@@ -1,0 +1,146 @@
+groe-render-ready/
+├── .github/
+│   └── workflows/
+│       └── ci.yml
+├── backend/
+│   ├── app/
+│   │   ├── ai/
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py
+│   │   │   └── fallback.py
+│   │   ├── api/
+│   │   │   ├── routes/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── diary.py
+│   │   │   │   ├── health.py
+│   │   │   │   ├── planner.py
+│   │   │   │   ├── plans.py
+│   │   │   │   ├── plants.py
+│   │   │   │   └── weather.py
+│   │   │   ├── __init__.py
+│   │   │   ├── deps.py
+│   │   │   └── router.py
+│   │   ├── auth/
+│   │   │   ├── __init__.py
+│   │   │   ├── dependencies.py
+│   │   │   └── security.py
+│   │   ├── core/
+│   │   │   ├── __init__.py
+│   │   │   ├── config.py
+│   │   │   └── logging.py
+│   │   ├── database/
+│   │   │   ├── __init__.py
+│   │   │   ├── base.py
+│   │   │   ├── seed.py
+│   │   │   └── session.py
+│   │   ├── diary/
+│   │   │   ├── __init__.py
+│   │   │   └── service.py
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   └── entities.py
+│   │   ├── planning/
+│   │   │   ├── __init__.py
+│   │   │   ├── optimizer.py
+│   │   │   └── scoring.py
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── diary.py
+│   │   │   └── planner.py
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   └── rate_limit.py
+│   │   ├── spatial/
+│   │   │   ├── __init__.py
+│   │   │   ├── geometry.py
+│   │   │   └── layout.py
+│   │   ├── weather/
+│   │   │   ├── __init__.py
+│   │   │   ├── client.py
+│   │   │   └── climate.py
+│   │   ├── __init__.py
+│   │   └── main.py
+│   ├── migrations/
+│   │   ├── versions/
+│   │   │   └── 20260801_0001_initial.py
+│   │   ├── env.py
+│   │   └── script.py.mako
+│   ├── scripts/
+│   │   ├── __init__.py
+│   │   ├── reset_seed.py
+│   │   ├── seed.py
+│   │   ├── start.sh
+│   │   └── wait_for_db.py
+│   ├── seed_data/
+│   │   └── crops.json
+│   ├── alembic.ini
+│   ├── requirements-dev.txt
+│   └── requirements.txt
+├── docs/
+│   ├── architecture.md
+│   ├── completion-report.md
+│   ├── deployment.md
+│   ├── design-system.md
+│   ├── planning-logic.md
+│   ├── plant-data-dictionary.md
+│   ├── render-deployment-audit.md
+│   └── repository-tree.txt
+├── frontend/
+│   ├── public/
+│   │   └── groe-mark.svg
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── AuthDialog.tsx
+│   │   │   ├── DiaryView.tsx
+│   │   │   ├── Header.tsx
+│   │   │   ├── OptionCard.tsx
+│   │   │   ├── PlanCard.tsx
+│   │   │   ├── PlantCatalog.tsx
+│   │   │   ├── PlotEditor.tsx
+│   │   │   ├── PlotMap.tsx
+│   │   │   ├── Progress.tsx
+│   │   │   ├── SavedGardens.tsx
+│   │   │   └── ShareCard.tsx
+│   │   ├── i18n/
+│   │   │   └── index.ts
+│   │   ├── services/
+│   │   │   └── api.ts
+│   │   ├── test/
+│   │   │   ├── App.test.tsx
+│   │   │   ├── PlotEditor.test.ts
+│   │   │   └── setup.ts
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   └── styles.css
+│   ├── .npmrc
+│   ├── index.html
+│   ├── package.json
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── tests/
+│   ├── backend/
+│   │   └── test_seed.py
+│   ├── integration/
+│   │   └── test_api.py
+│   ├── planning/
+│   │   ├── test_scoring.py
+│   │   └── test_stress_cases.py
+│   ├── spatial/
+│   │   └── test_geometry.py
+│   ├── stress/
+│   │   └── test_required_stress.py
+│   └── conftest.py
+├── .dockerignore
+├── .env.example
+├── .gitignore
+├── docker-compose.yml
+├── Dockerfile
+├── LICENSE
+├── README.md
+└── render.yaml
