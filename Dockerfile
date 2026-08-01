@@ -4,7 +4,6 @@ WORKDIR /app/frontend
 # Install frontend dependencies in a cacheable layer. package*.json works
 # whether or not a package-lock.json has been generated yet.
 COPY frontend/package*.json ./
-COPY frontend/.npmrc ./
 RUN npm install --include=dev --no-audit --no-fund
 
 # Copy every frontend build input, including tsconfig.app.json.
