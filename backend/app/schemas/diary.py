@@ -32,6 +32,12 @@ class GuestDiaryAdviceResponse(BaseModel):
     recommended_next_action: str | None
     follow_up_date: datetime | None
     provider_status: str
+    detected_crop_slug: str | None = None
+    detected_crop_name: str | None = None
+    crop_detection_confidence: float = 0.0
+    crop_detection_method: str = "unresolved"
+    clarification_needed: bool = False
+    clarification_options: list[str] = Field(default_factory=list)
 
 
 class DiaryResponse(BaseModel):

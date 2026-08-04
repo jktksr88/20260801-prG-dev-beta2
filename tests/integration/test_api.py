@@ -26,7 +26,7 @@ def test_plan_ownership_and_public_share(client):
 def test_diary_persists_with_deterministic_fallback(client):
     tok=register(client,"diary@example.com")
     headers={"Authorization":f"Bearer {tok['access_token']}"}
-    saved=client.post("/api/v1/plans",json={"name":"Diary garden","language":"en","planner_input":{},"plan_data":{"environment":{"seven_day_rain_mm":60}},"is_public":False},headers=headers).json()
-    r=client.post("/api/v1/diary",json={"plan_id":saved["id"],"entry_text":"The leaves are yellow and the soil is wet","user_question":"What should I check?","language":"en"},headers=headers)
+    saved=client.post("/api/v1/plans",json={"name":"Diary garden","language":"en","planner_input":{},"plan_data":{"environment":{"seven_day_rain_mm":60},"crops":[{"id":"caisim-test","slug":"caisim","name_en":"Choy sum","name_id":"Caisim / sawi hijau","scientific_name":"Brassica rapa, Parachinensis Group"}]},"is_public":False},headers=headers).json()
+    r=client.post("/api/v1/diary",json={"plan_id":saved["id"],"entry_text":"My choy sum leaves are yellow and the soil is wet","user_question":"What should I check?","language":"en"},headers=headers)
     assert r.status_code==201,r.text
     assert r.json()["ai_response"] and "definitive diagnosis" in r.json()["ai_response"]

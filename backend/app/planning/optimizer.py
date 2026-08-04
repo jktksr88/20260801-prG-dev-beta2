@@ -56,7 +56,7 @@ PLAN_CONFIGS = [
 ]
 
 def crop_to_dict(c: CropProfile) -> dict[str,Any]:
-    return {"id":c.id,"slug":c.slug,"scientific_name":c.species.scientific_name,"name_en":c.name_en,"name_id":c.name_id,"category":c.category,"annual_or_perennial":c.annual_or_perennial,"parameters":c.parameters,"guidance_en":c.guidance_en,"guidance_id":c.guidance_id,"verification_status":c.verification_status,"confidence_level":c.confidence_level}
+    return {"id":c.id,"slug":c.slug,"scientific_name":c.species.scientific_name,"name_en":c.name_en,"name_id":c.name_id,"alternative_names_en":c.alternative_names_en or [],"alternative_names_id":c.alternative_names_id or [],"category":c.category,"annual_or_perennial":c.annual_or_perennial,"parameters":c.parameters,"guidance_en":c.guidance_en,"guidance_id":c.guidance_id,"verification_status":c.verification_status,"confidence_level":c.confidence_level}
 
 def _rank(crop: dict, scored: dict, plan_key: str, request: PlannerInput, previous: list[set[str]]) -> float:
     p=crop["parameters"]; s=float(scored["score"]); days=float(p.get("days_to_first_harvest_min",90)); beginner=float(p.get("beginner_success_rating",60)); width=float(p.get("preferred_spacing_cm",30))
@@ -175,7 +175,7 @@ def generate_recommendations(db: Session, request: PlannerInput, climate: dict|N
         for c in final:
             count=sum(1 for p in layout["placements"] if p["slug"]==c["slug"])
             allocation = next((a for a in allocations if a["slug"] == c["slug"]), {})
-            crop_summaries.append({"id":c["id"],"slug":c["slug"],"name_en":c["name_en"],"name_id":c["name_id"],"scientific_name":c["scientific_name"],"category":c["category"],"quantity":count,"score":score_map[c["slug"]]["score"],"classification":score_map[c["slug"]]["classification"],"reason_codes":score_map[c["slug"]]["reason_codes"],"adjustment_codes":score_map[c["slug"]]["adjustment_codes"],"hard_constraints":score_map[c["slug"]]["hard_constraints"],"parameters":c["parameters"],"surface":allocation.get("surface","soil"),"container_spec":allocation.get("container_spec"),"guidance_en":c.get("guidance_en",{}),"guidance_id":c.get("guidance_id",{}),"verification_status":c["verification_status"]})
+            crop_summaries.append({"id":c["id"],"slug":c["slug"],"name_en":c["name_en"],"name_id":c["name_id"],"alternative_names_en":c.get("alternative_names_en",[]),"alternative_names_id":c.get("alternative_names_id",[]),"scientific_name":c["scientific_name"],"category":c["category"],"quantity":count,"score":score_map[c["slug"]]["score"],"classification":score_map[c["slug"]]["classification"],"reason_codes":score_map[c["slug"]]["reason_codes"],"adjustment_codes":score_map[c["slug"]]["adjustment_codes"],"hard_constraints":score_map[c["slug"]]["hard_constraints"],"parameters":c["parameters"],"surface":allocation.get("surface","soil"),"container_spec":allocation.get("container_spec"),"guidance_en":c.get("guidance_en",{}),"guidance_id":c.get("guidance_id",{}),"verification_status":c["verification_status"]})
         scores=[x["score"] for x in crop_summaries] or [0]
         first_harvest=min((x["parameters"].get("days_to_first_harvest_min",999) for x in crop_summaries),default=None)
         care=sum(float(x["parameters"].get("estimated_weekly_care_minutes",0))*max(1,x["quantity"]) for x in crop_summaries)
@@ -187,4 +187,4 @@ def generate_recommendations(db: Session, request: PlannerInput, climate: dict|N
         if slug in score_map and score_map[slug]["classification"]=="not_suitable":
             alternatives=sorted(candidates,key=lambda c:-score_map[c["slug"]]["score"])[:3]
             requested_review.append({"slug":slug,"classification":"not_suitable","hard_constraints":score_map[slug]["hard_constraints"],"alternatives":[a["slug"] for a in alternatives]})
-    return {"input_summary":request.model_dump(),"environment":climate,"plot":{"area_m2":round(poly.area,2),"usable_area_m2":round(usable.area,2)},"plans":plans,"requested_crop_review":requested_review,"engine_version":"8.0.0","deterministic":True,"data_version":"initial-50-v2"}
+    return {"input_summary":request.model_dump(),"environment":climate,"plot":{"area_m2":round(poly.area,2),"usable_area_m2":round(usable.area,2)},"plans":plans,"requested_crop_review":requested_review,"engine_version":"8.1.0","deterministic":True,"data_version":"initial-50-v2"}

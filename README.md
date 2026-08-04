@@ -1,4 +1,4 @@
-# GROE Beta v7.0.0 — Complete Client Feedback Release
+# GROE Beta v8.1.0 — Complete Client Feedback Release
 
 **GROE — Grow Resources in Omni-sustainable Environment** turns a beginner's available space and conditions into three feasible edible-garden plans.
 
@@ -41,10 +41,10 @@ After deployment, open:
 https://YOUR-SERVICE.onrender.com/api/v1/ready
 ```
 
-Expected response includes build `7.0.0`:
+Expected response includes build `8.1.0`:
 
 ```json
-{"status":"ready","build":"7.0.0"}
+{"status":"ready","build":"8.1.0"}
 ```
 
 For an unambiguous release check, also open `/api/v1/build`.
@@ -63,10 +63,10 @@ https://groe-fullstack-beta.onrender.com/api/v1/build
 The response must be:
 
 ```json
-{"service":"groe","build":"7.0.0"}
+{"service":"groe","build":"8.1.0"}
 ```
 
-The website footer must also show `Beta build 7.0.0`. If either check shows an older version, Render is not serving this repository revision.
+The website footer must also show `Beta build 8.1.0 · diary recognition + map truth release`. If either check shows an older version, Render is not serving this repository revision.
 
 ## Runtime boot order
 
@@ -88,14 +88,15 @@ The container:
 - Quantity reduction when plot capacity is limited.
 - Polygon-aware spatial placement and scaled SVG result map.
 - Trellis and vertical-tier rules.
-- Email/password authentication and JWT access/refresh tokens.
-- Saved plans and public read-only sharing.
+- Guest-first beta interface with no sign-in button.
+- Plans and diary entries saved locally in the current browser.
+- Existing authentication APIs remain dormant for a later cloud-sync phase.
 - Location autocomplete for Indonesian cities and live Open-Meteo temperature, humidity, rain and wind context.
 - Standardized crop symbols and colours across the map, plant cards and guide drawer.
 - Container diameter, depth and volume recommendations included in spatial capacity calculations.
 - Plant recommendation cards shown below the 2D map; the 50-profile database remains internal metadata.
 - Guest GROE Diary stored in the browser, with optional OpenAI advice and deterministic fallback.
-- Account sign-in remains optional and is only required for saved gardens and cross-device diary history.
+- Sign-in is turned off in the beta interface; cloud sync can be restored later without changing the planner engine.
 - PostgreSQL schema, Alembic migration and idempotent seed.
 
 
@@ -161,12 +162,13 @@ uvicorn app.main:app --reload --port 8000
 - JavaScript syntax check passed.
 - Browser-code landing-page render passed in an isolated JavaScript runtime.
 - Live planner flow reached the API, returned three plans and rendered the SVG plan.
-- Live account registration, plan save and diary entry flow passed.
+- Full visual browser validation covered landing, location dropdown, live-weather card, three-plan generation, standardized map, plant-card section, guide modal and guest diary.
+- Local browser plan saving and guest diary storage were exercised in the browser application.
 - Root website, versioned JavaScript/CSS, build, health, readiness, weather and planner endpoints returned HTTP 200 in a clean local boot test.
 - Every pinned production Python package version was confirmed to exist on public PyPI.
 - Dockerfile contains no Node or npm stage.
-- Production HTML loads only `/assets/app.v7.js` and `/assets/styles.v7.css`.
-- `/api/v1/build` and the `X-GROE-Build` response header identify the running release as `7.0.0`.
+- Production HTML loads only `/assets/app.v8.1.js` and `/assets/styles.v8.1.css`.
+- `/api/v1/build` and the `X-GROE-Build` response header identify the running release as `8.1.0`.
 
 ## Important data note
 

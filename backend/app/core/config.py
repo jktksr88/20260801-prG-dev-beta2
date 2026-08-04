@@ -9,7 +9,7 @@ def _bool(name: str, default: bool) -> bool:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = os.getenv("APP_NAME", "GROE")
-    build_version: str = os.getenv("GROE_BUILD_VERSION", "8.0.0")
+    build_version: str = os.getenv("GROE_BUILD_VERSION", "8.1.0")
     app_env: str = os.getenv("APP_ENV", "development")
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./groe.db")
     jwt_secret: str = os.getenv("JWT_SECRET", "development-only-change-me")

@@ -1,0 +1,4 @@
+Upload every extracted file and folder to the ROOT of the existing GitHub repository on branch main.
+Allow matching files to be replaced. Do not upload this ZIP itself.
+No Render setting or database change is required.
+After commit, use Render > Manual Deploy > Deploy latest commit only if auto-deploy does not start.

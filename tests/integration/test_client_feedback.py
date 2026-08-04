@@ -37,7 +37,7 @@ def test_container_specs_are_returned_and_used_in_layout(client, monkeypatch):
             assert crop["container_spec"]["recommended_diameter_cm"] >= crop["container_spec"]["minimum_diameter_cm"]
             assert crop["container_spec"]["recommended_depth_cm"] >= crop["container_spec"]["minimum_depth_cm"]
         for placement in plan["layout"]["placements"]:
-            assert placement["structure_type"] == "pot"
+            assert placement["structure_type"] in {"pot", "hanging_pot"}
             assert placement["container_spec"]
             expected = placement["container_spec"]["recommended_diameter_cm"] / 100
             assert abs(placement["width_m"] - expected) < 0.001
@@ -47,20 +47,29 @@ def test_guest_diary_advice_works_without_sign_in(client):
     response = client.post(
         "/api/v1/diary/guest-advice",
         json={
-            "plan_data": {"environment": {"seven_day_rain_mm": 55}, "crops": []},
+            "plan_data": {
+                "environment": {"seven_day_rain_mm": 55},
+                "crops": [
+                    {"slug": "kangkung", "name_en": "Water spinach", "name_id": "Kangkung"},
+                    {"slug": "caisim", "name_en": "Choy sum", "name_id": "Caisim / sawi hijau"},
+                ],
+            },
             "planner_input": planner_payload(),
-            "crop": {"name_en": "Chili", "name_id": "Cabai"},
+            "crop": {"name_en": "Water spinach", "name_id": "Kangkung"},
             "previous_entries": [],
             "growth_stage": "vegetative",
-            "entry_text": "The leaves are yellow and the pot is still wet.",
-            "user_question": "What should I check?",
-            "language": "en",
+            "entry_text": "Caisimnya layu dan pot masih basah.",
+            "user_question": "Apa yang perlu saya periksa?",
+            "language": "id",
         },
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["ai_response"]
     assert body["provider_status"] in {"deterministic_fallback", "ai_provider"}
+    assert body["detected_crop_slug"] == "caisim"
+    assert "Caisim" in body["detected_crop_name"]
+    assert "Kangkung" not in body["ai_response"]
+    assert body["clarification_needed"] is False
 
 
 def test_weather_routes_expose_location_and_live_metrics(client, monkeypatch):
@@ -89,6 +98,6 @@ def test_weather_routes_expose_location_and_live_metrics(client, monkeypatch):
 
 
 def test_public_navigation_hides_database_catalog():
-    app_js = Path("backend/app/static/assets/app.v7.js").read_text()
+    app_js = Path("backend/app/static/assets/app.v8.1.js").read_text()
     header_block = app_js[app_js.index("function header"):app_js.index("function landing")]
     assert 'data-view="plants"' not in header_block

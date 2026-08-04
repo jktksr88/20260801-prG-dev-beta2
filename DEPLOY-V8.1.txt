@@ -1,0 +1,17 @@
+GROE v8.1 — SIMPLE UPDATE
+
+1. Extract GROE-Client-Feedback-v8.1-PATCH.zip.
+2. Open the existing GitHub repository and select branch main.
+3. Choose Add file > Upload files.
+4. Upload all extracted patch contents. Do not upload the ZIP itself.
+5. Commit directly to main with: Fix diary crop recognition and hanging-pot map
+6. Render should deploy automatically. If it does not, use Manual Deploy > Deploy latest commit.
+7. No Render settings, database, Dockerfile, or environment variables need to change.
+8. Check: https://groe-fullstack-beta.onrender.com/api/v1/build
+   Expected: {"service":"groe","build":"8.1.0"}
+9. Open: https://groe-fullstack-beta.onrender.com/assets/app.v8.1.js
+   It must return JavaScript, not 404.
+10. Test diary with: caisimnya layu
+    The entry must show Tanaman terdeteksi: Caisim / sawi hijau and must not mention Kangkung.
+11. Generate a small container plan with vertical structures enabled.
+    Pot gantung must contain the crop code and colour, and its legend appears only when that real placement exists.

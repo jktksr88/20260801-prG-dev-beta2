@@ -44,6 +44,64 @@ USER NOTE OR QUESTION:
                     return str(part["text"]).strip()
         return None
 
+
+    def _recognition_prompt(self, candidates: list[dict[str, Any]], note: str, language: str) -> str:
+        compact = [
+            {
+                "slug": crop.get("slug"),
+                "name_id": crop.get("name_id"),
+                "name_en": crop.get("name_en"),
+                "alternative_names_id": crop.get("alternative_names_id", []),
+                "alternative_names_en": crop.get("alternative_names_en", []),
+            }
+            for crop in candidates
+        ]
+        return f"""
+Identify which crop the user explicitly refers to in this bilingual English/Indonesian garden note.
+Choose only one slug from CANDIDATES. Do not infer a crop merely because it was previously selected.
+If the note names multiple crops or no crop can be identified, return null for slug.
+Return JSON only: {{"slug": string|null, "confidence": number}}.
+
+CANDIDATES:
+{json.dumps(compact, ensure_ascii=False)}
+
+NOTE:
+{note}
+""".strip()
+
+    async def recognize_crop(
+        self, candidates: list[dict[str, Any]], note: str, language: str
+    ) -> dict[str, Any] | None:
+        if not settings.ai_api_key or not candidates:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                response = await client.post(
+                    f"{settings.openai_base_url}/responses",
+                    headers={
+                        "Authorization": f"Bearer {settings.ai_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": settings.openai_model,
+                        "input": self._recognition_prompt(candidates, note, language),
+                        "max_output_tokens": 100,
+                    },
+                )
+                response.raise_for_status()
+                text = self._extract_text(response.json())
+                if not text:
+                    return None
+                text = text.strip()
+                if text.startswith("```"):
+                    text = text.strip("`")
+                    if text.lower().startswith("json"):
+                        text = text[4:].strip()
+                parsed = json.loads(text)
+                return parsed if isinstance(parsed, dict) else None
+        except (httpx.HTTPError, ValueError, TypeError, json.JSONDecodeError):
+            return None
+
     async def explain_diary(self, context: dict[str, Any], question: str, language: str) -> str | None:
         if not settings.ai_api_key:
             return None

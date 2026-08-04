@@ -50,6 +50,26 @@ def generate_layout(
         key=lambda crop: (-float(crop["parameters"].get("mature_height_cm", 0)), crop["slug"]),
     )
 
+    # Reserve exactly one eligible container allocation as a hanging pot. It
+    # remains part of the placement count and space model, so the map never
+    # shows a decorative hanging pot that is absent from the actual plan.
+    hanging_candidate_slug = None
+    if vertical_allowed and poly.area <= 4:
+        hanging_candidate = next(
+            (
+                crop
+                for crop in crops
+                if crop.get("surface") != "soil"
+                and crop["parameters"].get("tiered_rack_eligible")
+                and float(crop["parameters"].get("mature_height_cm", 999)) <= 40
+                and float(crop.get("container_spec", {}).get("recommended_depth_cm", 999)) <= 25
+                and crop["parameters"].get("trellis_requirement") != "required"
+            ),
+            None,
+        )
+        hanging_candidate_slug = hanging_candidate.get("slug") if hanging_candidate else None
+    hanging_assignment_done = False
+
     for crop in crops:
         parameters = crop["parameters"]
         target = max(1, int(crop.get("target_quantity", 1)))
@@ -90,27 +110,52 @@ def generate_layout(
                 continue
             reserved_shapes.append(reserved)
             count += 1
-            placements.append(
-                {
-                    "placement_id": f"{crop['slug']}-{count}",
-                    "crop_profile_id": crop["id"],
-                    "slug": crop["slug"],
-                    "name_en": crop["name_en"],
-                    "name_id": crop["name_id"],
-                    "category": crop.get("category"),
-                    "x_m": round(x, 3),
-                    "y_m": round(y, 3),
-                    "width_m": round(width, 3),
-                    "height_m": round(depth, 3),
-                    "shape": "container" if is_container else "soil",
-                    "structure_type": structure_type,
-                    "container_spec": container_spec if is_container else None,
-                    "trellis": trellised,
-                    "tier": None,
-                    "zone": "main",
-                    "spacing_m": round(spacing, 3),
-                }
-            )
+            placement_id = f"{crop['slug']}-{count}"
+            placement_structure = structure_type
+            if (
+                is_container
+                and crop["slug"] == hanging_candidate_slug
+                and not hanging_assignment_done
+            ):
+                placement_structure = "hanging_pot"
+                hanging_assignment_done = True
+
+            placement = {
+                "placement_id": placement_id,
+                "crop_profile_id": crop["id"],
+                "slug": crop["slug"],
+                "name_en": crop["name_en"],
+                "name_id": crop["name_id"],
+                "category": crop.get("category"),
+                "x_m": round(x, 3),
+                "y_m": round(y, 3),
+                "width_m": round(width, 3),
+                "height_m": round(depth, 3),
+                "shape": "container" if is_container else "soil",
+                "structure_type": placement_structure,
+                "container_spec": container_spec if is_container else None,
+                "trellis": trellised,
+                "tier": None,
+                "zone": "vertical_edge" if placement_structure == "hanging_pot" else "main",
+                "spacing_m": round(spacing, 3),
+            }
+            placements.append(placement)
+            if placement_structure == "hanging_pot":
+                vertical_modules.append(
+                    {
+                        "type": "hanging_pot",
+                        "placement_id": placement_id,
+                        "crop_slug": crop["slug"],
+                        "name_en": crop["name_en"],
+                        "name_id": crop["name_id"],
+                        "x_m": round(x, 3),
+                        "y_m": round(y, 3),
+                        "width_m": round(width, 3),
+                        "recommended_diameter_cm": container_spec.get("recommended_diameter_cm"),
+                        "recommended_depth_cm": container_spec.get("recommended_depth_cm"),
+                        "support_warning": "Use a load-rated hook and keep the pot clear of the access path.",
+                    }
+                )
             if trellised:
                 vertical_modules.append(
                     {
@@ -172,31 +217,6 @@ def generate_layout(
                     }
                 )
 
-    # Hanging pots are only suggested for compact, shallow-rooted crops when
-    # vertical structures are allowed. They remain a separate module so their
-    # support requirement is visible rather than silently counted as ground area.
-    if vertical_allowed and any(crop.get("surface") != "soil" for crop in crops):
-        hanging = next(
-            (
-                crop
-                for crop in crops
-                if crop["parameters"].get("tiered_rack_eligible")
-                and float(crop["parameters"].get("mature_height_cm", 999)) <= 40
-                and float(crop.get("container_spec", {}).get("recommended_depth_cm", 999)) <= 25
-                and crop["parameters"].get("trellis_requirement") != "required"
-            ),
-            None,
-        )
-        if hanging and poly.area <= 4:
-            vertical_modules.append(
-                {
-                    "type": "hanging_pot",
-                    "crop_slug": hanging["slug"],
-                    "recommended_diameter_cm": hanging.get("container_spec", {}).get("recommended_diameter_cm"),
-                    "recommended_depth_cm": hanging.get("container_spec", {}).get("recommended_depth_cm"),
-                    "support_warning": "Use a load-rated hook and keep the pot clear of the access path.",
-                }
-            )
 
     compost = None
     if poly.area >= 8:

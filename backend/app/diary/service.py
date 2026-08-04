@@ -7,7 +7,7 @@ from app.ai.fallback import get_ai_service
 TOPICS = {
     "water": ["water","watering","dry","wet","air","siram","kering","basah","genang"],
     "pest": ["pest","aphid","caterpillar","bug","hama","ulat","kutu"],
-    "leaf": ["yellow","leaf","spot","wilting","daun","kuning","bercak","layu"],
+    "leaf": ["yellow","leaf","spot","wilting","wilt","daun","kuning","bercak","layu"],
     "growth": ["slow","growth","seedling","lambat","tumbuh","bibit"],
 }
 
@@ -58,6 +58,34 @@ def deterministic_guidance(context: dict[str,Any], text: str, language: str) -> 
             action="Make one low-risk check and add an update in 2–3 days."
         response=f"{intro} {body} Escalation signs include rapidly spreading wilt, stem collapse, foul odour or severe damage."
     return {"response":response,"topics":topics,"concern_level":concern,"next_action":action,"follow_up_date":datetime.now(timezone.utc)+timedelta(days=3) if topics else None}
+
+
+def clarification_guidance(text: str, language: str, options: list[str]) -> dict[str, Any]:
+    topics = detect_topics(text)
+    listed = ", ".join(options[:6])
+    if language == "id":
+        response = "Saya belum bisa memastikan tanaman yang dimaksud. Sebutkan nama tanaman secara alami di catatan berikutnya"
+        if listed:
+            response += f", misalnya: {listed}."
+        else:
+            response += "."
+        action = "Tambahkan nama tanaman agar GROE tidak memberi saran untuk tanaman yang salah."
+    else:
+        response = "I could not confidently identify which plant you mean. Mention the plant name naturally in your next note"
+        if listed:
+            response += f", for example: {listed}."
+        else:
+            response += "."
+        action = "Add the plant name so GROE does not give advice for the wrong crop."
+    return {
+        "response": response,
+        "topics": topics,
+        "concern_level": "clarification",
+        "next_action": action,
+        "follow_up_date": None,
+        "provider_status": "clarification_required",
+    }
+
 
 async def build_diary_response(context: dict[str,Any], question: str|None, entry_text: str, language: str) -> dict[str,Any]:
     combined=" ".join(filter(None,[entry_text,question]))
