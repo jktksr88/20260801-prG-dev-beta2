@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from app.core.config import settings
 from app.weather.climate import fallback_climate
+from app.weather.indonesia_locations import search_local_locations
 
 _CACHE_TTL_SECONDS = 600
 _location_cache: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
@@ -58,8 +60,11 @@ async def search_locations(query: str, language: str = "en") -> list[dict[str, A
     cached = _cached(_location_cache, key)
     if cached is not None:
         return cached
+
+    local_items = search_local_locations(cleaned, limit=10)
+    remote_items: list[dict[str, Any]] = []
     try:
-        async with httpx.AsyncClient(timeout=8, headers={"User-Agent": "GROE-beta/1.1"}) as client:
+        async with httpx.AsyncClient(timeout=8, headers={"User-Agent": "GROE-beta/7.0"}) as client:
             response = await client.get(
                 f"{settings.open_meteo_geocoding_url}/search",
                 params={
@@ -71,13 +76,14 @@ async def search_locations(query: str, language: str = "en") -> list[dict[str, A
                 },
             )
             response.raise_for_status()
-            items = []
             for row in response.json().get("results", []):
                 name = row.get("name")
+                if not name or row.get("latitude") is None or row.get("longitude") is None:
+                    continue
                 admin1 = row.get("admin1")
                 admin2 = row.get("admin2")
                 parts = [part for part in [name, admin2, admin1] if part]
-                items.append(
+                remote_items.append(
                     {
                         "id": row.get("id"),
                         "name": name,
@@ -87,13 +93,25 @@ async def search_locations(query: str, language: str = "en") -> list[dict[str, A
                         "latitude": row.get("latitude"),
                         "longitude": row.get("longitude"),
                         "elevation": row.get("elevation"),
-                        "country_code": row.get("country_code"),
+                        "country_code": row.get("country_code") or "ID",
+                        "source": "open_meteo",
                     }
                 )
-            _location_cache[key] = (time.monotonic(), items)
-            return items
     except (httpx.HTTPError, ValueError, TypeError):
-        return []
+        remote_items = []
+
+    merged: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in [*remote_items, *local_items]:
+        identity = (str(item.get("name", "")).lower(), str(item.get("admin1", "")).lower())
+        if identity in seen:
+            continue
+        seen.add(identity)
+        merged.append(item)
+        if len(merged) >= 10:
+            break
+    _location_cache[key] = (time.monotonic(), merged)
+    return merged
 
 
 async def get_weather_context(
@@ -110,6 +128,7 @@ async def get_weather_context(
             "provider": "climate_fallback",
             "provider_available": False,
             "message": "Weather coordinates unavailable; using broad climate fallback.",
+            "retrieved_at": datetime.now(timezone.utc).isoformat(),
             "weather_label": "Broad climate estimate" if language == "en" else "Perkiraan iklim umum",
         }
 
@@ -119,7 +138,7 @@ async def get_weather_context(
         return cached
 
     try:
-        async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "GROE-beta/1.1"}) as client:
+        async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "GROE-beta/7.0"}) as client:
             response = await client.get(
                 f"{settings.open_meteo_base_url}/forecast",
                 params={
@@ -156,6 +175,7 @@ async def get_weather_context(
                 "provider": "open_meteo",
                 "provider_available": True,
                 "updated_at": current.get("time"),
+                "retrieved_at": datetime.now(timezone.utc).isoformat(),
                 "timezone": data.get("timezone"),
                 "latitude": data.get("latitude", latitude),
                 "longitude": data.get("longitude", longitude),
@@ -185,6 +205,7 @@ async def get_weather_context(
             "provider": "climate_fallback",
             "provider_available": False,
             "message": "Weather provider unavailable; using broad climate fallback.",
+            "retrieved_at": datetime.now(timezone.utc).isoformat(),
             "weather_label": "Broad climate estimate" if language == "en" else "Perkiraan iklim umum",
             "confidence": "reduced",
         }

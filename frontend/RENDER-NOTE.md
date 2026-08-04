@@ -1,9 +1,11 @@
-# Frontend development source
+# Archived development frontend
 
-This folder contains the original React + TypeScript + Vite development source.
+This React/TypeScript/Vite directory is retained only as a development reference. It is **not** copied into the Render Docker build.
 
-Render does **not** run npm or Vite. The production browser files are committed under:
+The live Render application is the tested, versioned browser bundle under:
 
-`backend/app/static/`
+```text
+backend/app/static/
+```
 
-That deliberate single-runtime setup prevents npm package or frontend build failures during Render deployment. Changes made in this development folder must be reflected in the committed static frontend before release.
+Do not add a separate Render Static Site or frontend service. The FastAPI service serves both the website and `/api/v1` from one origin.

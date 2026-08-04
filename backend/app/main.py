@@ -25,7 +25,7 @@ async def lifespan(app:FastAPI):
             except Exception: logger.exception("Automatic seed check failed")
     yield
 
-app=FastAPI(title="GROE API",version="1.0.0",lifespan=lifespan,docs_url="/api/docs",openapi_url="/api/openapi.json")
+app=FastAPI(title="GROE API",version=settings.build_version,lifespan=lifespan,docs_url="/api/docs",openapi_url="/api/openapi.json")
 app.add_middleware(CORSMiddleware,allow_origins=list(settings.cors_origins),allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
 
 @app.middleware("http")
@@ -41,12 +41,11 @@ async def request_context(request:Request,call_next):
     response.headers["X-Content-Type-Options"]="nosniff"
     response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(self)"
-    # During beta, always revalidate the browser shell and static assets so a
-    # new Render deploy cannot appear unchanged because of an older cached UI.
-    if request.url.path == "/" or request.url.path == "/index.html" or request.url.path.startswith("/assets/"):
+    response.headers["X-GROE-Build"] = settings.build_version
+    if request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    else:
         response.headers["Cache-Control"] = "no-store, max-age=0"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
     logger.info(f"{request.method} {request.url.path} {response.status_code} {round((time.perf_counter()-start)*1000,1)}ms",extra={"request_id":request_id})
     return response
 
@@ -62,8 +61,8 @@ if static_dir.exists():
     async def spa(full_path:str):
         candidate=(static_dir/full_path).resolve()
         if full_path and candidate.is_relative_to(static_root) and candidate.is_file():
-            return FileResponse(candidate)
-        return FileResponse(static_dir/"index.html")
+            return FileResponse(candidate, headers={"X-GROE-Build": settings.build_version})
+        return FileResponse(static_dir/"index.html", headers={"Cache-Control": "no-store, max-age=0", "X-GROE-Build": settings.build_version})
 else:
     @app.get("/",include_in_schema=False)
     def root():

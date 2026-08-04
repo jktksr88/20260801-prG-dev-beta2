@@ -86,6 +86,24 @@ def _select_for_plan(candidates: list[dict], score_map: dict[str,dict], config: 
                     selected[-1]=alt; break
     return selected
 
+def _surface_for_crop(crop: dict, index: int, request: PlannerInput) -> str:
+    if request.surface == "soil":
+        return "soil"
+    if request.surface == "containers":
+        return "container"
+    parameters = crop.get("parameters", {})
+    if not parameters.get("container_eligible", True):
+        return "soil"
+    if not parameters.get("direct_soil_eligible", True):
+        return "container"
+    # In a mixed plan, compact leafy crops and herbs use containers while
+    # larger fruiting and root crops use the direct-soil zone. The index keeps
+    # same-category selections deterministic rather than random.
+    if crop.get("category") in {"leafy", "herb"}:
+        return "container"
+    return "container" if index % 3 == 2 else "soil"
+
+
 def _allocate(selected: list[dict], area: float, plan_key: str, request: PlannerInput) -> list[dict]:
     if not selected: return []
     usable_budget=area*(0.82 if area<3 else 0.72)
@@ -98,9 +116,9 @@ def _allocate(selected: list[dict], area: float, plan_key: str, request: Planner
         weights.append(w)
     total=sum(weights)
     out=[]
-    for c,w in zip(selected,weights):
+    for index, (c,w) in enumerate(zip(selected,weights)):
         p=c["parameters"]
-        surface = "soil" if request.surface == "soil" else "container"
+        surface = _surface_for_crop(c, index, request)
         container_spec = recommended_container(p) if surface == "container" else None
         spacing_m = float(p.get("preferred_spacing_cm", 25)) / 100
         if container_spec:
@@ -157,16 +175,16 @@ def generate_recommendations(db: Session, request: PlannerInput, climate: dict|N
         for c in final:
             count=sum(1 for p in layout["placements"] if p["slug"]==c["slug"])
             allocation = next((a for a in allocations if a["slug"] == c["slug"]), {})
-            crop_summaries.append({"id":c["id"],"slug":c["slug"],"name_en":c["name_en"],"name_id":c["name_id"],"scientific_name":c["scientific_name"],"category":c["category"],"quantity":count,"score":score_map[c["slug"]]["score"],"classification":score_map[c["slug"]]["classification"],"reason_codes":score_map[c["slug"]]["reason_codes"],"adjustment_codes":score_map[c["slug"]]["adjustment_codes"],"hard_constraints":score_map[c["slug"]]["hard_constraints"],"parameters":c["parameters"],"container_spec":allocation.get("container_spec"),"guidance_en":c.get("guidance_en",{}),"guidance_id":c.get("guidance_id",{}),"verification_status":c["verification_status"]})
+            crop_summaries.append({"id":c["id"],"slug":c["slug"],"name_en":c["name_en"],"name_id":c["name_id"],"scientific_name":c["scientific_name"],"category":c["category"],"quantity":count,"score":score_map[c["slug"]]["score"],"classification":score_map[c["slug"]]["classification"],"reason_codes":score_map[c["slug"]]["reason_codes"],"adjustment_codes":score_map[c["slug"]]["adjustment_codes"],"hard_constraints":score_map[c["slug"]]["hard_constraints"],"parameters":c["parameters"],"surface":allocation.get("surface","soil"),"container_spec":allocation.get("container_spec"),"guidance_en":c.get("guidance_en",{}),"guidance_id":c.get("guidance_id",{}),"verification_status":c["verification_status"]})
         scores=[x["score"] for x in crop_summaries] or [0]
         first_harvest=min((x["parameters"].get("days_to_first_harvest_min",999) for x in crop_summaries),default=None)
         care=sum(float(x["parameters"].get("estimated_weekly_care_minutes",0))*max(1,x["quantity"]) for x in crop_summaries)
         why,adjustments,trade=_explanation(config,request,layout,crop_summaries,request.language)
-        plans.append({**config,"feasibility_score":round(sum(scores)/len(scores)),"beginner_difficulty":"easy" if config["key"]=="easy_start" else "moderate","crop_profile_count":len(crop_summaries),"total_plants":sum(x["quantity"] for x in crop_summaries),"estimated_occupied_area_m2":layout["occupied_area_m2"],"containers_required":sum(x["quantity"] for x in crop_summaries) if request.surface!="soil" else 0,"vertical_modules_required":len(layout["vertical_modules"]),"weekly_care_minutes":round(care),"expected_first_harvest_days":first_harvest,"expected_harvest_pattern":"staggered_and_repeat" if config["key"]=="fast_harvest" else "mixed","why_it_fits":why,"adjustments":adjustments,"trade_off":trade,"crops":crop_summaries,"layout":layout,"environment":climate})
+        plans.append({**config,"feasibility_score":round(sum(scores)/len(scores)),"beginner_difficulty":"easy" if config["key"]=="easy_start" else "moderate","crop_profile_count":len(crop_summaries),"total_plants":sum(x["quantity"] for x in crop_summaries),"estimated_occupied_area_m2":layout["occupied_area_m2"],"containers_required":sum(x["quantity"] for x in crop_summaries if x.get("container_spec")),"vertical_modules_required":len(layout["vertical_modules"]),"weekly_care_minutes":round(care),"expected_first_harvest_days":first_harvest,"expected_harvest_pattern":"staggered_and_repeat" if config["key"]=="fast_harvest" else "mixed","why_it_fits":why,"adjustments":adjustments,"trade_off":trade,"crops":crop_summaries,"layout":layout,"environment":climate})
     # Report requested crops that are genuinely unsuitable and suggest alternatives.
     requested_review=[]
     for slug in request.desired_crops:
         if slug in score_map and score_map[slug]["classification"]=="not_suitable":
             alternatives=sorted(candidates,key=lambda c:-score_map[c["slug"]]["score"])[:3]
             requested_review.append({"slug":slug,"classification":"not_suitable","hard_constraints":score_map[slug]["hard_constraints"],"alternatives":[a["slug"] for a in alternatives]})
-    return {"input_summary":request.model_dump(),"environment":climate,"plot":{"area_m2":round(poly.area,2),"usable_area_m2":round(usable.area,2)},"plans":plans,"requested_crop_review":requested_review,"engine_version":"1.0.0","deterministic":True,"data_version":"initial-50-v1"}
+    return {"input_summary":request.model_dump(),"environment":climate,"plot":{"area_m2":round(poly.area,2),"usable_area_m2":round(usable.area,2)},"plans":plans,"requested_crop_review":requested_review,"engine_version":"7.0.0","deterministic":True,"data_version":"initial-50-v2"}
