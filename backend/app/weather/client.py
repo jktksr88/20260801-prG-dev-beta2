@@ -64,7 +64,7 @@ async def search_locations(query: str, language: str = "en") -> list[dict[str, A
     local_items = search_local_locations(cleaned, limit=10)
     remote_items: list[dict[str, Any]] = []
     try:
-        async with httpx.AsyncClient(timeout=8, headers={"User-Agent": "GROE-beta/7.0"}) as client:
+        async with httpx.AsyncClient(timeout=8, headers={"User-Agent": "GROE-beta/8.0"}) as client:
             response = await client.get(
                 f"{settings.open_meteo_geocoding_url}/search",
                 params={
@@ -138,7 +138,7 @@ async def get_weather_context(
         return cached
 
     try:
-        async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "GROE-beta/7.0"}) as client:
+        async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "GROE-beta/8.0"}) as client:
             response = await client.get(
                 f"{settings.open_meteo_base_url}/forecast",
                 params={

@@ -1,0 +1,16 @@
+GROE v8 — SIMPLE DEPLOYMENT
+
+1. Extract this ZIP.
+2. In GitHub, select branch: main.
+3. Add file > Upload files.
+4. Upload ALL extracted contents to the repository ROOT.
+5. Commit: Deploy complete GROE client feedback v8
+6. Wait for Render auto-deploy. If needed: Manual Deploy > Deploy latest commit.
+7. After Render says Live, open:
+   https://groe-fullstack-beta.onrender.com/api/v1/build
+8. It MUST say:
+   {"service":"groe","build":"8.0.0"}
+9. Open the website. Footer MUST say: Beta build 8.0.0 · client feedback release
+
+Do not create a new Render service. Do not split frontend/backend. Do not add a frontend URL.
+Weather needs no API key. AI diary works in fallback mode without a key.
