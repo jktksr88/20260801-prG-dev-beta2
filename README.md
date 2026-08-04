@@ -1,4 +1,4 @@
-# GROE Beta v8.1.0 — Complete Client Feedback Release
+# GROE Beta v8.2.0 — Complete Client Feedback Release
 
 **GROE — Grow Resources in Omni-sustainable Environment** turns a beginner's available space and conditions into three feasible edible-garden plans.
 
@@ -41,10 +41,10 @@ After deployment, open:
 https://YOUR-SERVICE.onrender.com/api/v1/ready
 ```
 
-Expected response includes build `8.1.0`:
+Expected response includes build `8.2.0`:
 
 ```json
-{"status":"ready","build":"8.1.0"}
+{"status":"ready","build":"8.2.0"}
 ```
 
 For an unambiguous release check, also open `/api/v1/build`.
@@ -63,10 +63,10 @@ https://groe-fullstack-beta.onrender.com/api/v1/build
 The response must be:
 
 ```json
-{"service":"groe","build":"8.1.0"}
+{"service":"groe","build":"8.2.0"}
 ```
 
-The website footer must also show `Beta build 8.1.0 · diary recognition + map truth release`. If either check shows an older version, Render is not serving this repository revision.
+The website footer must also show `Beta build 8.2.0 · multi-crop diary + vertical map release`. If either check shows an older version, Render is not serving this repository revision.
 
 ## Runtime boot order
 
@@ -167,8 +167,8 @@ uvicorn app.main:app --reload --port 8000
 - Root website, versioned JavaScript/CSS, build, health, readiness, weather and planner endpoints returned HTTP 200 in a clean local boot test.
 - Every pinned production Python package version was confirmed to exist on public PyPI.
 - Dockerfile contains no Node or npm stage.
-- Production HTML loads only `/assets/app.v8.1.js` and `/assets/styles.v8.1.css`.
-- `/api/v1/build` and the `X-GROE-Build` response header identify the running release as `8.1.0`.
+- Production HTML loads only `/assets/app.v8.2.js` and `/assets/styles.v8.2.css`.
+- `/api/v1/build` and the `X-GROE-Build` response header identify the running release as `8.2.0`.
 
 ## Important data note
 

@@ -25,6 +25,13 @@ class GuestDiaryAdviceRequest(BaseModel):
     language: str = Field(default="en", pattern="^(en|id)$")
 
 
+class DetectedCropMatch(BaseModel):
+    slug: str
+    name: str
+    confidence: float
+    method: str
+
+
 class GuestDiaryAdviceResponse(BaseModel):
     ai_response: str
     concern_level: str
@@ -38,6 +45,7 @@ class GuestDiaryAdviceResponse(BaseModel):
     crop_detection_method: str = "unresolved"
     clarification_needed: bool = False
     clarification_options: list[str] = Field(default_factory=list)
+    detected_crops: list[DetectedCropMatch] = Field(default_factory=list)
 
 
 class DiaryResponse(BaseModel):

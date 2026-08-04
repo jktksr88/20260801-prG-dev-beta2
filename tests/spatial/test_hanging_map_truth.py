@@ -6,9 +6,9 @@ from app.spatial.layout import generate_layout
 def eligible_crop():
     return {
         "id": "caisim-id",
-        "slug": "caisim",
-        "name_en": "Choy sum",
-        "name_id": "Caisim / sawi hijau",
+        "slug": "kangkung",
+        "name_en": "Water spinach",
+        "name_id": "Kangkung",
         "category": "leafy",
         "target_quantity": 3,
         "surface": "container",

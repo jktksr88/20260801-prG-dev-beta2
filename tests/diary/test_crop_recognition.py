@@ -45,3 +45,37 @@ async def test_unnamed_plant_requests_clarification():
     assert result["crop"] is None
     assert result["clarification_needed"] is True
     assert "Kangkung" in result["options"]
+
+
+def test_common_indonesian_spelling_variants_are_resolved():
+    crops = [
+        {
+            "slug": "pakcoy",
+            "name_id": "Pakcoy",
+            "name_en": "Pak choi",
+            "alternative_names_id": [],
+            "alternative_names_en": [],
+        },
+        *CROPS,
+    ]
+    matches = deterministic_crop_matches(crops, "pokcoy pendek, caisin berbintik putih")
+    assert [match.crop["slug"] for match in matches[:2]] == ["pakcoy", "caisim"]
+
+
+@pytest.mark.asyncio
+async def test_multiple_explicit_crops_are_kept_separate_without_clarification():
+    crops = [
+        {
+            "slug": "pakcoy",
+            "name_id": "Pakcoy",
+            "name_en": "Pak choi",
+            "alternative_names_id": [],
+            "alternative_names_en": [],
+        },
+        *CROPS,
+    ]
+    result = await resolve_crop_reference(crops, "pokcoy pendek ya, caisin berbintik putih", "id")
+    assert [crop["slug"] for crop in result["crops"]] == ["pakcoy", "caisim"]
+    assert result["crop"] is None
+    assert result["clarification_needed"] is False
+    assert result["method"] == "deterministic_multi_crop"

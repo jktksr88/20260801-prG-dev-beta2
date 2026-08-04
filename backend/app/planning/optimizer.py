@@ -187,4 +187,4 @@ def generate_recommendations(db: Session, request: PlannerInput, climate: dict|N
         if slug in score_map and score_map[slug]["classification"]=="not_suitable":
             alternatives=sorted(candidates,key=lambda c:-score_map[c["slug"]]["score"])[:3]
             requested_review.append({"slug":slug,"classification":"not_suitable","hard_constraints":score_map[slug]["hard_constraints"],"alternatives":[a["slug"] for a in alternatives]})
-    return {"input_summary":request.model_dump(),"environment":climate,"plot":{"area_m2":round(poly.area,2),"usable_area_m2":round(usable.area,2)},"plans":plans,"requested_crop_review":requested_review,"engine_version":"8.1.0","deterministic":True,"data_version":"initial-50-v2"}
+    return {"input_summary":request.model_dump(),"environment":climate,"plot":{"area_m2":round(poly.area,2),"usable_area_m2":round(usable.area,2)},"plans":plans,"requested_crop_review":requested_review,"engine_version":"8.2.0","deterministic":True,"data_version":"initial-50-v2"}

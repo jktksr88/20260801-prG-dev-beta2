@@ -28,12 +28,12 @@ def _payload(surface: str = "mixed"):
 def test_build_endpoint_and_versioned_browser_assets(client):
     build = client.get("/api/v1/build")
     assert build.status_code == 200
-    assert build.json()["build"] == "8.1.0"
+    assert build.json()["build"] == "8.2.0"
     index = client.get("/")
     assert index.status_code == 200
-    assert "app.v8.1.js" in index.text
-    assert "styles.v8.1.css" in index.text
-    assert index.headers["x-groe-build"] == "8.1.0"
+    assert "app.v8.2.js" in index.text
+    assert "styles.v8.2.css" in index.text
+    assert index.headers["x-groe-build"] == "8.2.0"
     assert "no-store" in index.headers["cache-control"]
 
 
@@ -64,8 +64,8 @@ def test_mixed_surface_returns_soil_and_container_footprints(client, monkeypatch
 
 
 def test_static_ui_contains_all_client_feedback_components():
-    js = Path("backend/app/static/assets/app.v8.1.js").read_text()
-    css = Path("backend/app/static/assets/styles.v8.1.css").read_text()
+    js = Path("backend/app/static/assets/app.v8.2.js").read_text()
+    css = Path("backend/app/static/assets/styles.v8.2.css").read_text()
     assert 'request("/plants?page_size=50")' not in js
     assert 'data-view="plants"' not in js
     assert "Use my current location" in js
@@ -86,3 +86,16 @@ def test_static_ui_contains_all_client_feedback_components():
     assert "Beta build" in js
     assert ".crop-map-key" in css
     assert ".pot-summary" in css
+
+
+def test_v82_static_map_has_external_sun_compass_and_explicit_assignments():
+    js = Path("backend/app/static/assets/app.v8.2.js").read_text()
+    css = Path("backend/app/static/assets/styles.v8.2.css").read_text()
+    assert "Strongest light:" in js
+    assert "Cahaya terkuat:" in js
+    assert 'class="compass"' in js
+    assert "Vertical placement assignments" in js
+    assert "Rack Tier" in js
+    assert "detected_crops" in js
+    assert ".vertical-assignment-summary" in css
+    assert ".detected-crop-list" in css

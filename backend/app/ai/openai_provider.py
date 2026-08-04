@@ -24,8 +24,9 @@ You are GROE Diary, a cautious home-gardening assistant for beginners in Indones
 Reply in {language_name}. Use only the supplied plan, crop, weather and diary context.
 Do not claim a definitive diagnosis. Do not invent measurements, pesticides, diseases,
 or crop facts. Start with the most likely low-risk checks. Clearly state uncertainty.
-Keep the answer under 170 words and include: possible issue, what to check now,
-low-risk next action, and warning signs that need local expert help.
+Keep the answer concise and include: possible issue, what to check now, low-risk next action,
+and warning signs that need local expert help. If CONTEXT contains a crops list, answer each
+listed crop separately and never collapse them into one plant.
 
 CONTEXT:
 {safe_context}
@@ -57,10 +58,11 @@ USER NOTE OR QUESTION:
             for crop in candidates
         ]
         return f"""
-Identify which crop the user explicitly refers to in this bilingual English/Indonesian garden note.
-Choose only one slug from CANDIDATES. Do not infer a crop merely because it was previously selected.
-If the note names multiple crops or no crop can be identified, return null for slug.
-Return JSON only: {{"slug": string|null, "confidence": number}}.
+Identify every crop explicitly referred to in this bilingual English/Indonesian garden note.
+Choose slugs only from CANDIDATES. Preserve the order in which crops are mentioned.
+Recognize common spelling variants, but do not infer a crop merely because it was
+previously selected. If no crop can be identified, return an empty array.
+Return JSON only: {{"matches": [{{"slug": string, "confidence": number}}]}}.
 
 CANDIDATES:
 {json.dumps(compact, ensure_ascii=False)}
@@ -69,9 +71,9 @@ NOTE:
 {note}
 """.strip()
 
-    async def recognize_crop(
+    async def recognize_crops(
         self, candidates: list[dict[str, Any]], note: str, language: str
-    ) -> dict[str, Any] | None:
+    ) -> list[dict[str, Any]] | None:
         if not settings.ai_api_key or not candidates:
             return None
         try:
@@ -85,7 +87,7 @@ NOTE:
                     json={
                         "model": settings.openai_model,
                         "input": self._recognition_prompt(candidates, note, language),
-                        "max_output_tokens": 100,
+                        "max_output_tokens": 160,
                     },
                 )
                 response.raise_for_status()
@@ -98,7 +100,10 @@ NOTE:
                     if text.lower().startswith("json"):
                         text = text[4:].strip()
                 parsed = json.loads(text)
-                return parsed if isinstance(parsed, dict) else None
+                if not isinstance(parsed, dict):
+                    return None
+                matches = parsed.get("matches")
+                return matches if isinstance(matches, list) else None
         except (httpx.HTTPError, ValueError, TypeError, json.JSONDecodeError):
             return None
 

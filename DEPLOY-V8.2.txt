@@ -1,0 +1,30 @@
+GROE v8.2 — SIMPLE UPDATE
+
+1. Extract GROE-v8.2-PATCH.zip.
+2. Open the GitHub repository and select branch: main.
+3. Add file -> Upload files.
+4. Upload the extracted files and folders. Do not upload the ZIP itself.
+5. Commit directly to main with:
+   Fix multi-crop diary and vertical map assignments
+6. Wait for Render auto-deploy.
+7. If it does not start: Render -> Manual Deploy -> Deploy latest commit.
+8. Do not change any Render settings.
+
+CHECK
+https://groe-fullstack-beta.onrender.com/api/v1/build
+Expected: {"service":"groe","build":"8.2.0"}
+
+Then test this diary note:
+pokcoy pendek ya, caisin agak berbintik putih di ujung daun
+
+Expected:
+- Pakcoy and Caisim are both detected.
+- No clarification request.
+- Separate guidance for both plants.
+- No mention of Kangkung.
+
+Map check:
+- The sun sits outside the plot.
+- A direction label and N/E/S/W compass are visible.
+- Rack tiers identify their assigned crops.
+- The hanging-pot crop is named below the map.

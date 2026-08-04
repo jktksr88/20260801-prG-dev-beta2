@@ -37,7 +37,7 @@ def test_container_specs_are_returned_and_used_in_layout(client, monkeypatch):
             assert crop["container_spec"]["recommended_diameter_cm"] >= crop["container_spec"]["minimum_diameter_cm"]
             assert crop["container_spec"]["recommended_depth_cm"] >= crop["container_spec"]["minimum_depth_cm"]
         for placement in plan["layout"]["placements"]:
-            assert placement["structure_type"] in {"pot", "hanging_pot"}
+            assert placement["structure_type"] in {"pot", "hanging_pot", "rack_pot"}
             assert placement["container_spec"]
             expected = placement["container_spec"]["recommended_diameter_cm"] / 100
             assert abs(placement["width_m"] - expected) < 0.001
@@ -98,6 +98,35 @@ def test_weather_routes_expose_location_and_live_metrics(client, monkeypatch):
 
 
 def test_public_navigation_hides_database_catalog():
-    app_js = Path("backend/app/static/assets/app.v8.1.js").read_text()
+    app_js = Path("backend/app/static/assets/app.v8.2.js").read_text()
     header_block = app_js[app_js.index("function header"):app_js.index("function landing")]
     assert 'data-view="plants"' not in header_block
+
+
+def test_guest_diary_handles_two_named_crops_and_spelling_variants(client):
+    response = client.post(
+        "/api/v1/diary/guest-advice",
+        json={
+            "plan_data": {
+                "environment": {},
+                "crops": [
+                    {"slug": "pakcoy", "name_en": "Pak choi", "name_id": "Pakcoy"},
+                    {"slug": "caisim", "name_en": "Choy sum", "name_id": "Caisim / sawi hijau"},
+                    {"slug": "kangkung", "name_en": "Water spinach", "name_id": "Kangkung"},
+                ],
+            },
+            "planner_input": planner_payload(),
+            "previous_entries": [],
+            "growth_stage": "vegetative",
+            "entry_text": "pokcoy pendek ya, caisin agak berbintik putih di ujung daun",
+            "user_question": None,
+            "language": "id",
+        },
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [item["slug"] for item in body["detected_crops"]] == ["pakcoy", "caisim"]
+    assert body["clarification_needed"] is False
+    assert "Pakcoy" in body["ai_response"]
+    assert "Caisim" in body["ai_response"]
+    assert "Kangkung" not in body["ai_response"]
