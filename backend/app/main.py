@@ -41,6 +41,12 @@ async def request_context(request:Request,call_next):
     response.headers["X-Content-Type-Options"]="nosniff"
     response.headers["Referrer-Policy"]="strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"]="camera=(), microphone=(), geolocation=(self)"
+    # During beta, always revalidate the browser shell and static assets so a
+    # new Render deploy cannot appear unchanged because of an older cached UI.
+    if request.url.path == "/" or request.url.path == "/index.html" or request.url.path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     logger.info(f"{request.method} {request.url.path} {response.status_code} {round((time.perf_counter()-start)*1000,1)}ms",extra={"request_id":request_id})
     return response
 
