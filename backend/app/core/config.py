@@ -16,7 +16,9 @@ class Settings:
     refresh_token_days: int = int(os.getenv("REFRESH_TOKEN_DAYS", "14"))
     cors_origins: tuple[str, ...] = tuple(filter(None, os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:8000").split(",")))
     ai_provider: str = os.getenv("AI_PROVIDER", "none")
-    ai_api_key: str | None = os.getenv("AI_API_KEY") or None
+    ai_api_key: str | None = os.getenv("OPENAI_API_KEY") or os.getenv("AI_API_KEY") or None
+    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
     open_meteo_base_url: str = os.getenv("OPEN_METEO_BASE_URL", "https://api.open-meteo.com/v1")
     open_meteo_geocoding_url: str = os.getenv("OPEN_METEO_GEOCODING_URL", "https://geocoding-api.open-meteo.com/v1")
     auto_seed: bool = _bool("AUTO_SEED", True)

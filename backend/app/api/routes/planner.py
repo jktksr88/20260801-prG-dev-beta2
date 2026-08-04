@@ -10,6 +10,6 @@ router=APIRouter(prefix="/planner",tags=["planner"])
 
 @router.post("/recommendations")
 async def recommendations(payload:PlannerInput,db:Session=Depends(get_db)):
-    weather=await get_weather_context(payload.location.city,payload.location.latitude,payload.location.longitude,payload.location.elevation_m)
+    weather=await get_weather_context(payload.location.city,payload.location.latitude,payload.location.longitude,payload.location.elevation_m,payload.language)
     try: return generate_recommendations(db,payload,weather)
     except GeometryError as exc: raise HTTPException(422,{"code":"INVALID_PLOT_GEOMETRY","message":str(exc)})

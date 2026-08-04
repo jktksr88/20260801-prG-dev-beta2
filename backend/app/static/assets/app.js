@@ -4,6 +4,8 @@
   const API = "/api/v1";
   const TOKEN_KEY = "groe.tokens";
   const LANG_KEY = "groe.language";
+  const GUEST_DIARY_KEY = "groe.guestDiary.v1";
+  let locationSearchTimer = null;
   const root = document.getElementById("root");
 
   const copy = {
@@ -101,7 +103,12 @@
     diaryEntries: [],
     diaryStage: "seedling",
     diaryText: "",
-    diaryQuestion: ""
+    diaryQuestion: "",
+    locationSuggestions: [],
+    locationLoading: false,
+    weather: null,
+    weatherLoading: false,
+    showCropGuide: false
   };
 
   state.input = defaultInput(state.lang);
@@ -109,7 +116,7 @@
 
   function defaultInput(lang) {
     return {
-      location: { city: "Jakarta" },
+      location: { city: "", latitude: null, longitude: null, elevation_m: null, display_name: "" },
       plot: { shape: "rectangle", length_m: 2, width_m: 1.5, sun_direction: "north" },
       surface: "containers",
       sunlight: "partial",
@@ -128,6 +135,36 @@
 
   function t(key) {
     return copy[state.lang][key] || copy.en[key] || key;
+  }
+
+  function lt(en, id) {
+    return state.lang === "id" ? id : en;
+  }
+
+  function readGuestDiary() {
+    try { return JSON.parse(localStorage.getItem(GUEST_DIARY_KEY) || "[]"); }
+    catch (_) { return []; }
+  }
+
+  function writeGuestDiary(entries) {
+    localStorage.setItem(GUEST_DIARY_KEY, JSON.stringify(entries.slice(0, 40)));
+  }
+
+  const CROP_COLORS = ["#4f8a63", "#d49c32", "#7e6aa2", "#3f8292", "#b86455", "#6e8c3f", "#a46b8c", "#94724f"];
+  const CROP_EMOJI = {
+    "cabai-rawit":"🌶️","cabai-merah":"🌶️","paprika":"🫑","tomat":"🍅","tomat-ceri":"🍅",
+    "mentimun":"🥒","terong":"🍆","stroberi":"🍓","nanas":"🍍","melon":"🍈","semangka":"🍉",
+    "labu-kuning":"🎃","wortel":"🥕","kentang":"🥔","ubi-jalar":"🍠","bawang-putih":"🧄",
+    "jahe":"🫚","jagung":"🌽","selada":"🥬","pakcoy":"🥬","kubis":"🥬","kale":"🥬",
+    "kemangi":"🌿","basil":"🌿","mint":"🌿","rosemary":"🌿","serai":"🌱","pandan":"🌱"
+  };
+
+  function cropVisual(slug, category) {
+    let hash = 0;
+    for (const ch of String(slug || category || "crop")) hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
+    const color = CROP_COLORS[Math.abs(hash) % CROP_COLORS.length];
+    const fallback = category === "root" ? "🥕" : category === "fruiting" ? "🌶️" : category === "herb" ? "🌿" : "🥬";
+    return { color, emoji: CROP_EMOJI[slug] || fallback };
   }
 
   function esc(value) {
@@ -201,9 +238,16 @@
     savePlan: payload => request("/plans", { method: "POST", body: JSON.stringify(payload) }),
     deletePlan: id => request(`/plans/${encodeURIComponent(id)}`, { method: "DELETE" }),
     plants: () => request("/plants?page_size=50"),
+    locations: query => request(`/weather/locations?q=${encodeURIComponent(query)}&language=${encodeURIComponent(state.lang)}`),
+    weather: location => {
+      const params = new URLSearchParams({ city: location.city, latitude: String(location.latitude), longitude: String(location.longitude), language: state.lang });
+      if (location.elevation_m != null) params.set("elevation_m", String(location.elevation_m));
+      return request(`/weather/context?${params.toString()}`);
+    },
     shared: slug => request(`/public/plans/${encodeURIComponent(slug)}`),
     diary: planId => request(`/diary?plan_id=${encodeURIComponent(planId)}`),
-    addDiary: payload => request("/diary", { method: "POST", body: JSON.stringify(payload) })
+    addDiary: payload => request("/diary", { method: "POST", body: JSON.stringify(payload) }),
+    guestDiary: payload => request("/diary/guest-advice", { method: "POST", body: JSON.stringify(payload) })
   };
 
   function header() {
@@ -215,7 +259,6 @@
         </button>
         <nav>
           <button data-action="navigate" data-view="planner">${esc(t("navPlan"))}</button>
-          <button data-action="navigate" data-view="plants">${esc(t("navPlants"))}</button>
           <button data-action="navigate" data-view="gardens">${esc(t("navGardens"))}</button>
         </nav>
         <div class="header-actions">
@@ -242,7 +285,6 @@
             <p>${esc(t("heroBody"))}</p>
             <div class="hero-actions">
               <button class="button primary large" data-action="navigate" data-view="planner">${esc(t("start"))}<span>→</span></button>
-              <button class="text-button" data-action="navigate" data-view="plants">${esc(t("explore"))}</button>
             </div>
             <small class="quiet-proof">✓ ${esc(t("noAccount"))}</small>
           </div>
@@ -282,10 +324,31 @@
     let content = "";
 
     if (state.step === 1) {
+      const suggestions = state.locationSuggestions.map(item => `
+        <button type="button" class="location-option" data-action="select-location"
+          data-name="${attr(item.name)}" data-display="${attr(item.display_name || item.name)}"
+          data-latitude="${attr(item.latitude)}" data-longitude="${attr(item.longitude)}" data-elevation="${attr(item.elevation ?? "")}">
+          <b>${esc(item.name)}</b><small>${esc([item.admin2, item.admin1].filter(Boolean).join(", "))}</small>
+        </button>`).join("");
+      const weather = state.weather;
+      const weatherCard = state.weatherLoading
+        ? `<div class="weather-card loading-weather"><div class="spinner"></div><span>${esc(lt("Updating local weather…", "Memperbarui cuaca lokal…"))}</span></div>`
+        : weather
+          ? `<div class="weather-card ${weather.provider_available ? "live" : "fallback"}">
+              <div class="weather-main"><span>${weather.provider_available ? "☀︎" : "◎"}</span><div><small>${esc(weather.weather_label || lt("Current conditions", "Kondisi saat ini"))}</small><b>${weather.current_temperature_c ?? weather.mean_temperature_c ?? "—"}°C</b></div></div>
+              <div class="weather-metrics"><span><b>${weather.humidity_percent ?? "—"}%</b><small>${esc(lt("humidity", "kelembapan"))}</small></span><span><b>${weather.precipitation_mm ?? "—"} mm</b><small>${esc(lt("rain now", "hujan saat ini"))}</small></span><span><b>${weather.wind_speed_kmh ?? "—"} km/h</b><small>${esc(lt("wind", "angin"))}</small></span></div>
+              <small class="weather-status">${esc(weather.provider_available ? lt("Live weather from Open-Meteo", "Cuaca langsung dari Open-Meteo") : lt("Weather unavailable; broad climate fallback is active", "Cuaca tidak tersedia; perkiraan iklim umum digunakan"))}</small>
+            </div>`
+          : "";
       content = `
-        <span class="eyebrow">GROE / 01</span><h1>${esc(t("cityTitle"))}</h1><p class="lead">${esc(t("cityBody"))}</p>
-        <label class="field hero-field"><span>${esc(t("city"))}</span><input data-field="city" value="${attr(input.location.city)}" placeholder="Jakarta, Bandung, Surabaya…"></label>
-        <div class="context-card"><span class="context-icon">◎</span><div><b>${esc(input.location.city || "Indonesia")}</b><small>Broad climate context with weather fallback</small></div></div>
+        <span class="eyebrow">GROE / 01</span><h1>${esc(t("cityTitle"))}</h1><p class="lead">${esc(lt("Type at least three letters, then choose the correct location from the dropdown.", "Ketik minimal tiga huruf, lalu pilih lokasi yang benar dari daftar."))}</p>
+        <div class="location-combobox">
+          <label class="field hero-field"><span>${esc(t("city"))}</span><input autocomplete="off" data-field="city" value="${attr(input.location.city)}" placeholder="Jakarta, Bandung, Surabaya…"></label>
+          ${state.locationLoading ? `<div class="location-loading">${esc(t("loading"))}</div>` : ""}
+          ${suggestions ? `<div class="location-dropdown">${suggestions}</div>` : ""}
+        </div>
+        ${input.location.latitude != null ? `<div class="context-card selected-location"><span class="context-icon">⌖</span><div><b>${esc(input.location.display_name || input.location.city)}</b><small>${Number(input.location.latitude).toFixed(3)}, ${Number(input.location.longitude).toFixed(3)} · ${esc(lt("Location selected", "Lokasi dipilih"))}</small></div></div>` : `<p class="selection-hint">${esc(lt("Select a result so GROE can retrieve temperature and humidity.", "Pilih hasil agar GROE dapat mengambil suhu dan kelembapan."))}</p>`}
+        ${weatherCard}
       `;
     } else if (state.step === 2) {
       content = `
@@ -348,7 +411,7 @@
       `;
     }
 
-    const canContinue = state.step !== 2 || area > 0;
+    const canContinue = (state.step !== 1 || state.input.location.latitude != null) && (state.step !== 2 || area > 0);
     return `
       <main class="planner-page"><div class="planner-shell">
         <div class="progress"><span>${esc(t("step"))} ${state.step} / 5</span><div><i style="width:${state.step * 20}%"></i></div></div>
@@ -394,6 +457,10 @@
     `;
   }
 
+  function polygonPoints(points, pad) {
+    return (points || []).map(p => `${Number(p[0]) + pad},${Number(p[1]) + pad}`).join(" ");
+  }
+
   function plotMap(plan) {
     const layout = plan.layout || {};
     const boundary = layout.plot_boundary || [[0,0],[2,0],[2,1.5],[0,1.5]];
@@ -401,55 +468,102 @@
     const ys = boundary.map(p => Number(p[1]));
     const maxX = Math.max(...xs, 1);
     const maxY = Math.max(...ys, 1);
-    const pad = 0.15;
-    const points = boundary.map(p => `${Number(p[0]) + pad},${Number(p[1]) + pad}`).join(" ");
-    const placements = (layout.placements || []).map((p, i) => {
+    const pad = 0.18;
+    const points = polygonPoints(boundary, pad);
+    const access = layout.access_zone ? `<polygon points="${polygonPoints(layout.access_zone, pad)}" fill="#d8cbb8" opacity=".94" stroke="#ae9d85" stroke-width=".018"></polygon>` : "";
+    const placements = (layout.placements || []).map(p => {
       const active = state.selectedCrop === p.slug;
       const x = Number(p.x_m || 0) + pad;
       const y = Number(p.y_m || 0) + pad;
       const w = Math.max(.12, Number(p.width_m || .2));
       const h = Math.max(.12, Number(p.height_m || .2));
       const label = state.lang === "id" ? p.name_id : p.name_en;
-      const fill = ["#7fa678","#d6a84f","#7c78a0","#6e9bad","#d17d62"][i % 5];
+      const visual = cropVisual(p.slug, p.category);
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      const fontSize = Math.max(.10, Math.min(w, h) * .42);
+      const shape = p.structure_type === "pot" || p.shape === "container"
+        ? `<circle cx="${cx}" cy="${cy}" r="${Math.min(w,h)*.46}" fill="#d7b28c" stroke="#8b6547" stroke-width="${active ? ".05" : ".025"}"></circle><circle cx="${cx}" cy="${cy}" r="${Math.min(w,h)*.34}" fill="${visual.color}" opacity=".92"></circle>`
+        : `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx=".06" fill="${visual.color}" opacity=".9" stroke="#f8f3e8" stroke-width="${active ? ".05" : ".022"}"></rect>`;
       return `
-        <g class="placement ${active ? "active" : ""}" data-action="select-crop" data-slug="${attr(p.slug)}">
-          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx=".08" fill="${fill}" stroke="#f8f3e8" stroke-width="${active ? ".055" : ".025"}"></rect>
-          <circle cx="${x+w/2}" cy="${y+h/2}" r="${Math.min(w,h)*.22}" fill="rgba(255,255,255,.5)"></circle>
-          ${w > .32 && h > .22 ? `<text x="${x+w/2}" y="${y+h/2+.025}" text-anchor="middle" font-size=".08" fill="#173128" font-weight="700">${esc(label.slice(0,9))}</text>` : ""}
-          ${p.trellis ? `<line x1="${x}" y1="${y}" x2="${x+w}" y2="${y}" stroke="#f4d35e" stroke-width=".035" stroke-dasharray=".06 .04"></line>` : ""}
-        </g>
-      `;
+        <g class="placement ${active ? "active" : ""}" data-action="open-crop-guide" data-slug="${attr(p.slug)}" tabindex="0" role="button">
+          ${shape}
+          <text x="${cx}" y="${cy + fontSize*.32}" text-anchor="middle" font-size="${fontSize}" font-family="system-ui">${esc(visual.emoji)}</text>
+          ${w > .34 ? `<text x="${cx}" y="${y+h-.035}" text-anchor="middle" font-size=".065" fill="#173128" font-weight="800">${esc(label.slice(0,11))}</text>` : ""}
+          ${p.trellis ? `<line x1="${x}" y1="${y}" x2="${x+w}" y2="${y}" stroke="#f0c94c" stroke-width=".035" stroke-dasharray=".055 .035"></line>` : ""}
+        </g>`;
     }).join("");
+
+    const modules = (layout.vertical_modules || []).map((module, index) => {
+      if (module.type === "tiered_rack") {
+        const x = Number(module.x_m ?? 0) + pad;
+        const y = Number(module.y_m ?? 0) + pad;
+        const w = Number(module.module_width_m || .65);
+        return `<g class="map-module"><rect x="${x}" y="${y}" width="${w}" height=".14" rx=".025" fill="#7f6c5c" stroke="#fff" stroke-width=".018"></rect><line x1="${x+.05}" y1="${y}" x2="${x+.05}" y2="${y+.18}" stroke="#57483d" stroke-width=".025"></line><line x1="${x+w-.05}" y1="${y}" x2="${x+w-.05}" y2="${y+.18}" stroke="#57483d" stroke-width=".025"></line></g>`;
+      }
+      if (module.type === "hanging_pot") {
+        const x = maxX + pad - .18 - index * .08;
+        return `<g class="map-module"><line x1="${x}" y1="${pad}" x2="${x}" y2="${pad+.12}" stroke="#5d5145" stroke-width=".018"></line><path d="M ${x-.07} ${pad+.12} Q ${x} ${pad+.22} ${x+.07} ${pad+.12} Z" fill="#c78f61" stroke="#80583d" stroke-width=".018"></path></g>`;
+      }
+      return "";
+    }).join("");
+
+    const compost = layout.compost ? `<rect x="${Number(layout.compost.x_m)+pad}" y="${Number(layout.compost.y_m)+pad}" width="${layout.compost.width_m}" height="${layout.compost.height_m}" rx=".04" fill="#5d4936" stroke="#cdb28f" stroke-width=".025"></rect><text x="${Number(layout.compost.x_m)+pad+layout.compost.width_m/2}" y="${Number(layout.compost.y_m)+pad+layout.compost.height_m/2+.02}" text-anchor="middle" font-size=".08" fill="#fff">C</text>` : "";
+
     return `
       <div class="map-wrap"><svg class="plot-svg" viewBox="0 0 ${maxX + pad * 2} ${maxY + pad * 2}" role="img" aria-label="Scaled garden layout">
-        <defs><pattern id="soil" width=".12" height=".12" patternUnits="userSpaceOnUse"><rect width=".12" height=".12" fill="#755c45"></rect><circle cx=".03" cy=".04" r=".008" fill="#9a7b5d"></circle></pattern></defs>
-        <polygon points="${points}" fill="url(#soil)" stroke="#4b392b" stroke-width=".06" stroke-linejoin="round"></polygon>
-        ${placements}
-        <text x="${pad}" y="${maxY + pad * 2 - .04}" font-size=".08" fill="#fff">1 unit = 1 metre</text>
-      </svg></div>
-    `;
+        <defs>
+          <pattern id="soil" width=".12" height=".12" patternUnits="userSpaceOnUse"><rect width=".12" height=".12" fill="#7b614a"></rect><circle cx=".03" cy=".04" r=".008" fill="#a88867"></circle></pattern>
+        </defs>
+        <polygon points="${points}" fill="url(#soil)" stroke="#4b392b" stroke-width=".055" stroke-linejoin="round"></polygon>
+        ${access}${placements}${modules}${compost}
+        <g class="sun-arrow"><circle cx="${pad+.12}" cy="${pad+.12}" r=".09" fill="#f3c94f"></circle><text x="${pad+.12}" y="${pad+.15}" text-anchor="middle" font-size=".1">☀</text></g>
+        <text x="${pad}" y="${maxY + pad * 2 - .035}" font-size=".072" fill="#fff">1 unit = 1 metre</text>
+      </svg></div>`;
+  }
+
+  function mapLegend(plan) {
+    const hasPot = (plan.layout?.placements || []).some(p => p.shape === "container");
+    const hasSoil = (plan.layout?.placements || []).some(p => p.shape === "soil");
+    const modules = plan.layout?.vertical_modules || [];
+    const hasRack = modules.some(m => m.type === "tiered_rack");
+    const hasHanging = modules.some(m => m.type === "hanging_pot");
+    const hasTrellis = modules.some(m => m.type === "trellis");
+    const items = [
+      ["soil", lt("Soil bed", "Tanah langsung"), hasSoil],
+      ["pot", lt("Pot", "Pot"), hasPot],
+      ["hanging", lt("Hanging pot", "Pot gantung"), hasHanging],
+      ["path", lt("Access path", "Jalur akses"), !!plan.layout?.access_zone],
+      ["rack", lt("Plant stand / rack", "Stand / rak tanaman"), hasRack],
+      ["trellis", lt("Trellis", "Teralis"), hasTrellis],
+      ["compost", lt("Compost point", "Titik kompos"), !!plan.layout?.compost]
+    ];
+    return `<div class="map-legend expanded">${items.map(([type,label,used]) => `<span class="${used ? "used" : "unused"}"><i class="legend-${type}"></i>${esc(label)}</span>`).join("")}</div>`;
+  }
+
+  function plantCard(crop) {
+    const label = state.lang === "id" ? crop.name_id : crop.name_en;
+    const p = crop.parameters || {};
+    const visual = cropVisual(crop.slug, crop.category);
+    const pot = crop.container_spec;
+    const harvest = `${p.days_to_first_harvest_min ?? "—"}–${p.days_to_first_harvest_max ?? "—"}`;
+    const thirdMetric = pot
+      ? `<b>Ø ${esc(pot.recommended_diameter_cm)} cm</b><small>${esc(lt("ideal GROE pot", "pot ideal GROE"))}</small>`
+      : `<b>${esc(p.preferred_spacing_cm ?? "—")} cm</b><small>${esc(lt("plant spacing", "jarak tanam"))}</small>`;
+    return `<article class="recommendation-plant-card" style="--crop:${attr(visual.color)}">
+      <div class="plant-card-visual"><span class="suitability-badge">${Math.round(crop.score || 0)}% ${esc(lt("fit", "cocok"))}</span><span class="plant-emoji">${esc(visual.emoji)}</span></div>
+      <div class="plant-card-body"><h3>${esc(label)}</h3><em>${esc(crop.scientific_name)}</em>
+        <div class="plant-card-metrics"><span><b>${esc(harvest)}</b><small>${esc(lt("days to harvest", "hari hingga panen"))}</small></span><span><b>${esc(p.preferred_direct_sun_hours ?? p.minimum_direct_sun_hours ?? "—")}</b><small>${esc(lt("sun hours", "jam matahari"))}</small></span><span>${thirdMetric}</span></div>
+        ${pot ? `<p class="pot-note">${esc(lt(`Recommended: ${pot.recommended_depth_cm} cm deep · ${pot.recommended_volume_l} L`, `Rekomendasi: kedalaman ${pot.recommended_depth_cm} cm · ${pot.recommended_volume_l} L`))}</p>` : ""}
+        <div class="plant-card-footer"><span>${esc(crop.quantity)} ${esc(lt("plants", "tanaman"))}</span><button data-action="open-crop-guide" data-slug="${attr(crop.slug)}">${esc(lt("View guide", "Lihat panduan"))} →</button></div>
+      </div>
+    </article>`;
   }
 
   function detail() {
     const plan = state.selected;
     if (!plan) return errorPage();
     if (!state.selectedCrop && plan.crops?.length) state.selectedCrop = plan.crops[0].slug;
-    const crop = (plan.crops || []).find(c => c.slug === state.selectedCrop) || (plan.crops || [])[0];
-    const cropButtons = (plan.crops || []).map((c, i) => {
-      const label = state.lang === "id" ? c.name_id : c.name_en;
-      return `<button class="${state.selectedCrop === c.slug ? "active" : ""}" data-action="select-crop" data-slug="${attr(c.slug)}"><span class="crop-symbol c${i%5}">${esc(label.slice(0,1))}</span><span><b>${esc(label)}</b><small>${esc(c.quantity)} × · ${Math.round(c.score)}%</small></span></button>`;
-    }).join("");
-    let cropDetail = "";
-    if (crop) {
-      cropDetail = `
-        <div class="crop-detail"><span class="eyebrow">PLANT PROFILE</span><h2>${esc(state.lang === "id" ? crop.name_id : crop.name_en)}</h2><em>${esc(crop.scientific_name)}</em>
-        <div class="crop-chips"><span>${esc(crop.category)}</span><span>${esc(crop.classification)}</span><span>${esc(crop.verification_status)}</span></div>
-        <h4>${esc(t("selectedBecause"))}</h4><p>${esc((crop.reason_codes || []).join(" · ") || plan.why_it_fits)}</p>
-        ${crop.adjustment_codes?.length ? `<h4>${esc(t("adjustments"))}</h4><p>${esc(crop.adjustment_codes.join(" · "))}</p>` : ""}
-        ${crop.hard_constraints?.length ? `<h4>${esc(t("warning"))}</h4><p>${esc(crop.hard_constraints.join(" · "))}</p>` : ""}
-        </div>
-      `;
-    }
     return `
       <main class="page detail-page">
         <button class="back-link" data-action="navigate" data-view="${state.readOnly ? "landing" : "results"}">← ${esc(state.readOnly ? t("home") : t("back"))}</button>
@@ -459,21 +573,48 @@
           <div class="detail-actions">
             ${state.readOnly ? "" : `<button class="button primary" data-action="save-plan">${esc(state.savedPlan ? t("saved") : t("save"))}</button>`}
             <button class="button secondary" data-action="share-plan">${esc(t("share"))}</button>
-            ${state.savedPlan ? `<button class="button secondary" data-action="open-diary">${esc(t("diary"))}</button>` : ""}
+            ${state.readOnly ? "" : `<button class="button secondary" data-action="open-diary">${esc(t("diary"))}</button>`}
           </div>
         </header>
         ${state.error ? `<div class="alert error">${esc(state.error)}</div>` : ""}
-        <section class="layout-grid">
-          <div class="layout-panel">
-            <div class="panel-title"><div><span class="eyebrow">2D PLAN</span><h2>${esc(t("mapTitle"))}</h2></div><div class="map-legend"><span><i class="legend-plant"></i>Plant footprint</span><span><i class="legend-trellis"></i>Trellis</span></div></div>
-            ${plotMap(plan)}
-            <div class="layout-stats"><div><b>${plan.layout ? Number(plan.layout.plot_area_m2).toFixed(1) : "—"} m²</b><small>${esc(t("area"))}</small></div><div><b>${esc(plan.total_plants)}</b><small>${esc(t("plants"))}</small></div><div><b>${esc(plan.containers_required)}</b><small>containers</small></div><div><b>${esc(plan.weekly_care_minutes)} min</b><small>${esc(t("care"))}</small></div></div>
-          </div>
-          <aside class="crop-panel"><div class="crop-list">${cropButtons}</div>${cropDetail}</aside>
+        <section class="layout-panel map-first">
+          <div class="panel-title"><div><span class="eyebrow">2D PLAN</span><h2>${esc(t("mapTitle"))}</h2><p>${esc(lt("Each crop keeps the same symbol and colour everywhere in GROE.", "Setiap tanaman memakai simbol dan warna yang sama di seluruh GROE."))}</p></div></div>
+          ${plotMap(plan)}
+          ${mapLegend(plan)}
+          <div class="layout-stats"><div><b>${plan.layout ? Number(plan.layout.plot_area_m2).toFixed(1) : "—"} m²</b><small>${esc(t("area"))}</small></div><div><b>${esc(plan.total_plants)}</b><small>${esc(t("plants"))}</small></div><div><b>${esc(plan.containers_required)}</b><small>${esc(lt("pots", "pot"))}</small></div><div><b>${esc(plan.weekly_care_minutes)} min</b><small>${esc(t("care"))}</small></div></div>
+        </section>
+        <section class="plant-recommendations-section">
+          <div class="plant-section-head"><div><span class="eyebrow">${esc(lt("PLANT RECOMMENDATIONS", "REKOMENDASI TANAMAN"))}</span><h2>${esc(lt("Your plant combination", "Kombinasi tanaman Anda"))}</h2></div><p>${esc(lt("Open a card for planting, care and post-harvest guidance.", "Buka kartu untuk panduan menanam, merawat, dan pascapanen."))}</p></div>
+          <div class="recommendation-plant-grid">${(plan.crops || []).map(plantCard).join("")}</div>
         </section>
         ${!state.readOnly && !state.savedPlan ? `<section class="save-strip"><label class="field"><span>Garden name</span><input data-field="save-name" value="${attr(state.saveName)}"></label><label class="inline-check"><input data-field="save-public" type="checkbox" ${state.savePublic ? "checked" : ""}> Create a read-only share link</label></section>` : ""}
-      </main>
-    `;
+      </main>`;
+  }
+
+  function guideList(items) {
+    return Array.isArray(items) && items.length ? `<ol>${items.map(item => `<li>${esc(item)}</li>`).join("")}</ol>` : `<p>${esc(lt("Guidance is still being reviewed.", "Panduan masih dalam proses peninjauan."))}</p>`;
+  }
+
+  function cropGuideModal() {
+    if (!state.showCropGuide || !state.selected) return "";
+    const crop = (state.selected.crops || []).find(item => item.slug === state.selectedCrop);
+    if (!crop) return "";
+    const label = state.lang === "id" ? crop.name_id : crop.name_en;
+    const guidance = state.lang === "id" ? (crop.guidance_id || {}) : (crop.guidance_en || {});
+    const p = crop.parameters || {};
+    const visual = cropVisual(crop.slug, crop.category);
+    const pot = crop.container_spec;
+    return `<div class="dialog-backdrop crop-guide-backdrop" role="dialog" aria-modal="true">
+      <div class="crop-guide-dialog"><button class="dialog-close" data-action="close-crop-guide">×</button>
+        <header style="--crop:${attr(visual.color)}"><span class="guide-emoji">${esc(visual.emoji)}</span><div><span class="eyebrow">${esc(crop.classification || "recommended")} · ${Math.round(crop.score || 0)}% ${esc(lt("fit", "cocok"))}</span><h2>${esc(label)}</h2><em>${esc(crop.scientific_name)}</em></div></header>
+        <div class="guide-metrics"><span><b>${p.days_to_first_harvest_min ?? "—"}–${p.days_to_first_harvest_max ?? "—"}</b><small>${esc(lt("days to harvest", "hari hingga panen"))}</small></span><span><b>${p.preferred_spacing_cm ?? "—"} cm</b><small>${esc(lt("plant spacing", "jarak tanaman"))}</small></span><span><b>${pot ? `Ø ${pot.recommended_diameter_cm} × ${pot.recommended_depth_cm} cm` : `${p.preferred_root_depth_cm ?? "—"} cm`}</b><small>${esc(pot ? lt("recommended pot", "pot rekomendasi") : lt("root depth", "kedalaman akar"))}</small></span><span><b>${esc(crop.quantity)}</b><small>${esc(lt("units in your plan", "unit di denah Anda"))}</small></span></div>
+        ${pot ? `<div class="guide-pot-callout"><b>${esc(lt("Ideal pot for this plan", "Pot ideal untuk rencana ini"))}</b><span>Ø ${pot.recommended_diameter_cm} cm · ${pot.recommended_depth_cm} cm ${esc(lt("deep", "dalam"))} · ${pot.recommended_volume_l} L</span><small>${esc(lt("Calculated from the crop minimums and preferred spacing stored in GROE metadata.", "Dihitung dari batas minimum tanaman dan jarak ideal yang tersimpan dalam metadata GROE."))}</small></div>` : ""}
+        <section><h3>${esc(lt("How to start", "Cara menanam dari awal"))}</h3>${guideList(guidance.planting_steps)}</section>
+        <section><h3>${esc(lt("How to care", "Cara merawat"))}</h3>${guideList(guidance.care_steps)}</section>
+        <section><h3>${esc(lt("After harvest", "Setelah panen"))}</h3>${guideList(guidance.harvest_steps)}<p>${esc(guidance.post_harvest || "")}</p></section>
+        <section class="guide-warning"><h3>${esc(lt("Warning signs", "Tanda peringatan"))}</h3>${guideList(guidance.warning_signs)}</section>
+      </div>
+    </div>`;
   }
 
   function plants() {
@@ -507,11 +648,13 @@
   }
 
   function diary() {
+    const guestMode = !(state.authenticated && state.savedPlan?.id);
     const entries = state.diaryEntries.map(item => `
-      <article class="diary-entry concern-${attr(item.concern_level || "low")}"><div class="entry-date"><b>${esc(new Date(item.entry_date).toLocaleDateString())}</b><span>${esc(item.growth_stage || "—")}</span></div><p>${esc(item.entry_text)}</p>${item.user_question ? `<blockquote>${esc(item.user_question)}</blockquote>` : ""}${item.ai_response ? `<div class="groe-response"><b>GROE</b><p>${esc(item.ai_response)}</p><small>${esc(item.recommended_next_action || t("fallback"))}</small></div>` : ""}</article>
+      <article class="diary-entry concern-${attr(item.concern_level || "low")}"><div class="entry-date"><b>${esc(new Date(item.entry_date).toLocaleDateString())}</b><span>${esc(item.growth_stage || "—")}</span></div><p>${esc(item.entry_text)}</p>${item.user_question ? `<blockquote>${esc(item.user_question)}</blockquote>` : ""}${item.ai_response ? `<div class="groe-response"><b>GROE ${item.provider_status === "ai_provider" ? "AI" : ""}</b><p>${esc(item.ai_response)}</p><small>${esc(item.recommended_next_action || t("fallback"))}</small></div>` : ""}</article>
     `).join("");
     return `
       <main class="page diary-page"><button class="back-link" data-action="navigate" data-view="detail">← ${esc(t("back"))}</button><span class="eyebrow">TEXT-ONLY GARDEN RECORD</span><h1>${esc(t("diaryTitle"))}</h1><p class="lead">${esc(t("diaryBody"))}</p>
+      ${guestMode ? `<div class="guest-diary-banner"><b>${esc(lt("No sign-in needed for testing", "Tidak perlu masuk untuk mencoba"))}</b><span>${esc(lt("Entries stay in this browser. Sign in only when you want cross-device history and saved gardens.", "Catatan tersimpan di browser ini. Masuk hanya jika Anda ingin riwayat lintas perangkat dan kebun tersimpan."))}</span></div>` : `<div class="guest-diary-banner synced"><b>${esc(lt("Synced diary", "Diary tersinkronisasi"))}</b><span>${esc(lt("This history is connected to your saved garden.", "Riwayat ini terhubung ke kebun tersimpan Anda."))}</span></div>`}
       ${state.error ? `<div class="alert error">${esc(state.error)}</div>` : ""}
       <form class="diary-form" data-form="diary"><label class="field"><span>${esc(t("growthStage"))}</span><select data-field="diary-stage"><option value="sowing" ${state.diaryStage==="sowing"?"selected":""}>Sowing</option><option value="seedling" ${state.diaryStage==="seedling"?"selected":""}>Seedling</option><option value="vegetative" ${state.diaryStage==="vegetative"?"selected":""}>Vegetative</option><option value="flowering" ${state.diaryStage==="flowering"?"selected":""}>Flowering</option><option value="fruiting" ${state.diaryStage==="fruiting"?"selected":""}>Fruiting</option><option value="harvest" ${state.diaryStage==="harvest"?"selected":""}>Harvest</option></select></label><label class="field"><span>${esc(t("entry"))}</span><textarea data-field="diary-text" required rows="5">${esc(state.diaryText)}</textarea></label><label class="field"><span>${esc(t("question"))}</span><textarea data-field="diary-question" rows="3">${esc(state.diaryQuestion)}</textarea></label><button class="button primary" ${state.loading ? "disabled" : ""}>${esc(state.loading ? t("loading") : t("addEntry"))}</button></form>
       <section class="timeline">${entries || `<div class="empty-state"><h2>${esc(t("noEntries"))}</h2></div>`}</section>
@@ -523,7 +666,7 @@
     if (!state.showAuth) return "";
     return `
       <div class="dialog-backdrop" role="dialog" aria-modal="true"><div class="auth-dialog"><button class="dialog-close" data-action="close-auth">×</button>
-        <span class="eyebrow">GROE ACCOUNT</span><h2>${esc(state.authMode === "login" ? t("loginTitle") : t("registerTitle"))}</h2><p>${esc(t("authRequired"))}</p>
+        <span class="eyebrow">GROE ACCOUNT</span><h2>${esc(state.authMode === "login" ? t("loginTitle") : t("registerTitle"))}</h2><p>${esc(lt("An account is only required to save gardens and sync diary history across devices.", "Akun hanya diperlukan untuk menyimpan kebun dan menyinkronkan riwayat diary antar perangkat."))}</p>
         ${state.error ? `<div class="alert error">${esc(state.error)}</div>` : ""}
         <form data-form="auth"><label class="field"><span>${esc(t("email"))}</span><input data-field="auth-email" type="email" required value="${attr(state.authEmail)}"></label><label class="field"><span>${esc(t("password"))}</span><input data-field="auth-password" type="password" required minlength="8" value="${attr(state.authPassword)}"></label><button class="button primary full" ${state.loading ? "disabled" : ""}>${esc(state.loading ? t("loading") : state.authMode === "login" ? t("login") : t("register"))}</button></form>
         <button class="switch-auth" data-action="switch-auth">${esc(state.authMode === "login" ? t("switchRegister") : t("switchLogin"))}</button>
@@ -546,11 +689,10 @@
     else if (state.view === "planner") body = planner();
     else if (state.view === "results") body = results();
     else if (state.view === "detail") body = detail();
-    else if (state.view === "plants") body = plants();
     else if (state.view === "gardens") body = gardens();
     else if (state.view === "diary") body = diary();
     else body = errorPage();
-    root.innerHTML = `<div class="app">${header()}${body}${authModal()}${footer()}</div>`;
+    root.innerHTML = `<div class="app">${header()}${body}${authModal()}${cropGuideModal()}${footer()}</div>`;
   }
 
   async function navigate(view) {
@@ -562,6 +704,8 @@
       state.selected = null;
       state.savedPlan = null;
       state.readOnly = false;
+      state.locationSuggestions = [];
+      state.weather = null;
     }
     if (view === "gardens") {
       if (!state.authenticated) {
@@ -575,14 +719,8 @@
       await loadGardens();
       return;
     }
-    if (view === "plants") {
-      state.view = "plants";
-      render();
-      if (!state.plants.length) await loadPlants();
-      return;
-    }
     if (view === "diary") {
-      if (!state.savedPlan) return;
+      if (!state.selected) return;
       state.view = "diary";
       render();
       await loadDiary();
@@ -685,7 +823,8 @@
     state.error = "";
     render();
     try {
-      state.diaryEntries = await api.diary(state.savedPlan.id);
+      if (state.authenticated && state.savedPlan?.id) state.diaryEntries = await api.diary(state.savedPlan.id);
+      else state.diaryEntries = readGuestDiary();
     } catch (e) {
       state.error = e.message;
     } finally {
@@ -722,27 +861,96 @@
   }
 
   async function submitDiary() {
-    if (!state.savedPlan || !state.diaryText.trim()) return;
+    if (!state.selected || !state.diaryText.trim()) return;
     state.loading = true;
     state.error = "";
     render();
     try {
-      await api.addDiary({
-        plan_id: state.savedPlan.id,
-        crop_profile_id: null,
-        map_zone: null,
-        growth_stage: state.diaryStage,
-        entry_text: state.diaryText.trim(),
-        user_question: state.diaryQuestion.trim() || null,
-        language: state.lang
-      });
+      if (state.authenticated && state.savedPlan?.id) {
+        await api.addDiary({
+          plan_id: state.savedPlan.id,
+          crop_profile_id: null,
+          map_zone: null,
+          growth_stage: state.diaryStage,
+          entry_text: state.diaryText.trim(),
+          user_question: state.diaryQuestion.trim() || null,
+          language: state.lang
+        });
+        state.diaryEntries = await api.diary(state.savedPlan.id);
+      } else {
+        const crop = (state.selected.crops || []).find(item => item.slug === state.selectedCrop) || (state.selected.crops || [])[0] || null;
+        const advice = await api.guestDiary({
+          plan_data: state.selected,
+          planner_input: state.input,
+          crop,
+          previous_entries: readGuestDiary().slice(0, 6),
+          growth_stage: state.diaryStage,
+          entry_text: state.diaryText.trim(),
+          user_question: state.diaryQuestion.trim() || null,
+          language: state.lang
+        });
+        const entry = {
+          id: `guest-${Date.now()}`,
+          entry_date: new Date().toISOString(),
+          growth_stage: state.diaryStage,
+          entry_text: state.diaryText.trim(),
+          user_question: state.diaryQuestion.trim() || null,
+          ai_response: advice.ai_response,
+          concern_level: advice.concern_level,
+          detected_topics: advice.detected_topics,
+          recommended_next_action: advice.recommended_next_action,
+          follow_up_date: advice.follow_up_date,
+          provider_status: advice.provider_status
+        };
+        state.diaryEntries = [entry, ...readGuestDiary()];
+        writeGuestDiary(state.diaryEntries);
+      }
       state.diaryText = "";
       state.diaryQuestion = "";
-      state.diaryEntries = await api.diary(state.savedPlan.id);
     } catch (e) {
       state.error = e.message;
     } finally {
       state.loading = false;
+      render();
+    }
+  }
+
+  async function searchLocations(query) {
+    const cleaned = query.trim();
+    if (cleaned.length < 3) {
+      state.locationSuggestions = [];
+      state.locationLoading = false;
+      render();
+      return;
+    }
+    state.locationLoading = true;
+    render();
+    try {
+      const data = await api.locations(cleaned);
+      if (state.input.location.city.trim() === cleaned) state.locationSuggestions = data.items || [];
+    } catch (_) {
+      state.locationSuggestions = [];
+      state.error = lt("Location search is temporarily unavailable. Please try again.", "Pencarian lokasi sementara tidak tersedia. Silakan coba lagi.");
+    } finally {
+      state.locationLoading = false;
+      render();
+      const field = root.querySelector('[data-field="city"]');
+      if (field) { field.focus(); field.setSelectionRange(field.value.length, field.value.length); }
+    }
+  }
+
+  async function loadWeather() {
+    if (state.input.location.latitude == null || state.input.location.longitude == null) return;
+    state.weatherLoading = true;
+    state.weather = null;
+    state.error = "";
+    render();
+    try {
+      state.weather = await api.weather(state.input.location);
+    } catch (e) {
+      state.error = e.message;
+    } finally {
+      state.weatherLoading = false;
       render();
     }
   }
@@ -760,6 +968,19 @@
       if (state.saveName === "My garden" || state.saveName === "Kebun saya") state.saveName = state.lang === "id" ? "Kebun saya" : "My garden";
       render();
     }
+    else if (action === "select-location") {
+      state.input.location = {
+        city: el.dataset.name || el.dataset.display,
+        display_name: el.dataset.display || el.dataset.name,
+        latitude: Number(el.dataset.latitude),
+        longitude: Number(el.dataset.longitude),
+        elevation_m: el.dataset.elevation === "" ? null : Number(el.dataset.elevation)
+      };
+      state.locationSuggestions = [];
+      await loadWeather();
+    }
+    else if (action === "open-crop-guide") { state.selectedCrop = el.dataset.slug; state.showCropGuide = true; render(); }
+    else if (action === "close-crop-guide") { state.showCropGuide = false; render(); }
     else if (action === "open-auth") { state.error = ""; state.showAuth = true; render(); }
     else if (action === "close-auth") { state.error = ""; state.showAuth = false; state.pendingAction = null; render(); }
     else if (action === "switch-auth") { state.error = ""; state.authMode = state.authMode === "login" ? "register" : "login"; render(); }
@@ -770,6 +991,7 @@
     }
     else if (action === "planner-next") {
       const area = Number(state.input.plot.length_m || 0) * Number(state.input.plot.width_m || 0);
+      if (state.step === 1 && state.input.location.latitude == null) { state.error = lt("Choose a location from the dropdown first.", "Pilih lokasi dari daftar terlebih dahulu."); render(); return; }
       if (state.step === 2 && area <= 0) { state.error = t("invalid"); render(); return; }
       state.step = Math.min(5, state.step + 1); state.error = ""; render(); window.scrollTo(0, 0);
     }
@@ -786,7 +1008,7 @@
         await navigate("detail");
       }
     }
-    else if (action === "select-crop") { state.selectedCrop = el.dataset.slug; render(); }
+    else if (action === "select-crop") { state.selectedCrop = el.dataset.slug; state.showCropGuide = true; render(); }
     else if (action === "save-plan") await savePlan();
     else if (action === "share-plan") await sharePlan();
     else if (action === "open-diary") await navigate("diary");
@@ -808,7 +1030,16 @@
     const field = event.target.dataset.field;
     if (!field) return;
     const value = event.target.type === "checkbox" ? event.target.checked : event.target.value;
-    if (field === "city") state.input.location.city = value;
+    if (field === "city") {
+      state.input.location.city = value;
+      state.input.location.display_name = "";
+      state.input.location.latitude = null;
+      state.input.location.longitude = null;
+      state.input.location.elevation_m = null;
+      state.weather = null;
+      clearTimeout(locationSearchTimer);
+      locationSearchTimer = setTimeout(() => searchLocations(String(value)), 350);
+    }
     else if (field === "plot-length") state.input.plot.length_m = Number(value);
     else if (field === "plot-width") state.input.plot.width_m = Number(value);
     else if (field === "vertical") state.input.vertical_allowed = value;

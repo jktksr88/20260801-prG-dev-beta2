@@ -66,6 +66,7 @@ async def build_diary_response(context: dict[str,Any], question: str|None, entry
     fallback=deterministic_guidance(context,combined,language)
     if ai_text:
         fallback["response"]=ai_text
+        fallback["provider_status"]="ai_provider"
     else:
         fallback["provider_status"]="deterministic_fallback"
     return fallback

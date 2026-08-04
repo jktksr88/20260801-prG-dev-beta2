@@ -71,9 +71,24 @@ The container:
 - Trellis and vertical-tier rules.
 - Email/password authentication and JWT access/refresh tokens.
 - Saved plans and public read-only sharing.
-- Text-only GROE Diary with deterministic fallback.
-- Open-Meteo integration with graceful fallback.
+- Location autocomplete for Indonesian cities and live Open-Meteo temperature, humidity, rain and wind context.
+- Standardized crop symbols and colours across the map, plant cards and guide drawer.
+- Container diameter, depth and volume recommendations included in spatial capacity calculations.
+- Plant recommendation cards shown below the 2D map; the 50-profile database remains internal metadata.
+- Guest GROE Diary stored in the browser, with optional OpenAI advice and deterministic fallback.
+- Account sign-in remains optional and is only required for saved gardens and cross-device diary history.
 - PostgreSQL schema, Alembic migration and idempotent seed.
+
+
+## Optional AI Diary setup
+
+The diary works without an external AI key by using cautious deterministic guidance. To test the AI provider in Render, add one secret environment variable to the existing web service:
+
+```text
+OPENAI_API_KEY=your-secret-key
+```
+
+`AI_PROVIDER=openai` and `OPENAI_MODEL=gpt-5-mini` are already defined in `render.yaml`. Never place the key in GitHub.
 
 ## Repository structure
 
@@ -121,7 +136,7 @@ uvicorn app.main:app --reload --port 8000
 
 ## Validation completed for this package
 
-- 33 automated backend, planning, spatial, authentication and integration tests passed.
+- 37 automated backend, planning, spatial, weather-route, guest-diary, authentication and integration tests passed.
 - Fresh Alembic migration completed.
 - Initial seed inserted exactly 50 profiles.
 - JavaScript syntax check passed.
