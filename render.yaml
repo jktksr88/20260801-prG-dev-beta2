@@ -28,7 +28,9 @@ services:
       - key: DB_WAIT_SECONDS
         value: "2"
       - key: AI_PROVIDER
-        value: none
+        value: openai
+      - key: OPENAI_MODEL
+        value: gpt-5-mini
       - key: LOG_LEVEL
         value: INFO
       - key: OPEN_METEO_BASE_URL

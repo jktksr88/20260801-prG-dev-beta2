@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Any
+import math
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.models import CropProfile
@@ -8,6 +9,45 @@ from app.spatial.geometry import build_polygon, reserve_access_zone, GeometryErr
 from app.spatial.layout import generate_layout
 from app.planning.scoring import score_crop
 from app.weather.climate import fallback_climate
+
+
+
+def _round_up_common(value: float, choices: tuple[int, ...]) -> int:
+    for choice in choices:
+        if value <= choice:
+            return choice
+    return int(math.ceil(value / 10.0) * 10)
+
+
+def recommended_container(parameters: dict[str, Any]) -> dict[str, int]:
+    """Return a conservative GROE layout recommendation derived from sourced minimums.
+
+    These values are a planning recommendation, not a replacement for cultivar-
+    specific nursery guidance. Diameter uses the larger of the crop's verified
+    minimum diameter and a compact share of its preferred spacing. Depth uses
+    the larger of minimum container depth and preferred root depth.
+    """
+    minimum_diameter = float(parameters.get("minimum_container_diameter_cm") or 20)
+    preferred_spacing = float(parameters.get("preferred_spacing_cm") or minimum_diameter)
+    mature_width = float(parameters.get("mature_width_cm") or preferred_spacing)
+    raw_diameter = max(minimum_diameter, min(preferred_spacing, mature_width))
+    diameter = _round_up_common(raw_diameter, (20, 25, 30, 35, 40, 45, 50, 60, 70, 80))
+
+    minimum_depth = float(parameters.get("minimum_container_depth_cm") or 15)
+    preferred_root_depth = float(parameters.get("preferred_root_depth_cm") or minimum_depth)
+    depth = _round_up_common(max(minimum_depth, preferred_root_depth), (15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80))
+
+    minimum_volume = float(parameters.get("minimum_container_volume_l") or 3)
+    cylinder_litres = math.pi * (diameter / 200) ** 2 * (depth / 100) * 1000 * 0.72
+    volume = _round_up_common(max(minimum_volume, cylinder_litres), (3, 5, 8, 10, 12, 15, 20, 25, 30, 40, 50, 60, 80, 100))
+    return {
+        "recommended_diameter_cm": diameter,
+        "recommended_depth_cm": depth,
+        "recommended_volume_l": volume,
+        "minimum_diameter_cm": int(round(minimum_diameter)),
+        "minimum_depth_cm": int(round(minimum_depth)),
+        "minimum_volume_l": int(round(minimum_volume)),
+    }
 
 PLAN_CONFIGS = [
     {"key":"easy_start","name_en":"Easy Start","name_id":"Mulai Mudah","accent":"groe","proposition_en":"The most forgiving route to a first harvest.","proposition_id":"Jalur paling ramah untuk panen pertama."},
@@ -60,11 +100,18 @@ def _allocate(selected: list[dict], area: float, plan_key: str, request: Planner
     out=[]
     for c,w in zip(selected,weights):
         p=c["parameters"]
-        footprint=max(0.025,(float(p.get("preferred_spacing_cm",25))/100)**2)
+        surface = "soil" if request.surface == "soil" else "container"
+        container_spec = recommended_container(p) if surface == "container" else None
+        spacing_m = float(p.get("preferred_spacing_cm", 25)) / 100
+        if container_spec:
+            pot_m = container_spec["recommended_diameter_cm"] / 100
+            footprint = max(0.025, max(spacing_m, pot_m) ** 2)
+        else:
+            footprint = max(0.025, spacing_m ** 2)
         qty=max(1,min(8,int((usable_budget*w/total)/footprint)))
         if request.desired_quantity is not None:
             qty=max(1,min(qty,max(1,request.desired_quantity//len(selected))))
-        out.append({**c,"target_quantity":qty,"surface":"soil" if request.surface=="soil" else "container"})
+        out.append({**c,"target_quantity":qty,"surface":surface,"container_spec":container_spec})
     return out
 
 def _explanation(config: dict, request: PlannerInput, layout: dict, crops: list[dict], language: str) -> tuple[str,list[str],str]:
@@ -109,12 +156,13 @@ def generate_recommendations(db: Session, request: PlannerInput, climate: dict|N
         crop_summaries=[]
         for c in final:
             count=sum(1 for p in layout["placements"] if p["slug"]==c["slug"])
-            crop_summaries.append({"id":c["id"],"slug":c["slug"],"name_en":c["name_en"],"name_id":c["name_id"],"scientific_name":c["scientific_name"],"category":c["category"],"quantity":count,"score":score_map[c["slug"]]["score"],"classification":score_map[c["slug"]]["classification"],"reason_codes":score_map[c["slug"]]["reason_codes"],"adjustment_codes":score_map[c["slug"]]["adjustment_codes"],"hard_constraints":score_map[c["slug"]]["hard_constraints"],"parameters":c["parameters"],"verification_status":c["verification_status"]})
+            allocation = next((a for a in allocations if a["slug"] == c["slug"]), {})
+            crop_summaries.append({"id":c["id"],"slug":c["slug"],"name_en":c["name_en"],"name_id":c["name_id"],"scientific_name":c["scientific_name"],"category":c["category"],"quantity":count,"score":score_map[c["slug"]]["score"],"classification":score_map[c["slug"]]["classification"],"reason_codes":score_map[c["slug"]]["reason_codes"],"adjustment_codes":score_map[c["slug"]]["adjustment_codes"],"hard_constraints":score_map[c["slug"]]["hard_constraints"],"parameters":c["parameters"],"container_spec":allocation.get("container_spec"),"guidance_en":c.get("guidance_en",{}),"guidance_id":c.get("guidance_id",{}),"verification_status":c["verification_status"]})
         scores=[x["score"] for x in crop_summaries] or [0]
         first_harvest=min((x["parameters"].get("days_to_first_harvest_min",999) for x in crop_summaries),default=None)
         care=sum(float(x["parameters"].get("estimated_weekly_care_minutes",0))*max(1,x["quantity"]) for x in crop_summaries)
         why,adjustments,trade=_explanation(config,request,layout,crop_summaries,request.language)
-        plans.append({**config,"feasibility_score":round(sum(scores)/len(scores)),"beginner_difficulty":"easy" if config["key"]=="easy_start" else "moderate","crop_profile_count":len(crop_summaries),"total_plants":sum(x["quantity"] for x in crop_summaries),"estimated_occupied_area_m2":layout["occupied_area_m2"],"containers_required":sum(x["quantity"] for x in crop_summaries) if request.surface!="soil" else 0,"vertical_modules_required":len(layout["vertical_modules"]),"weekly_care_minutes":round(care),"expected_first_harvest_days":first_harvest,"expected_harvest_pattern":"staggered_and_repeat" if config["key"]=="fast_harvest" else "mixed","why_it_fits":why,"adjustments":adjustments,"trade_off":trade,"crops":crop_summaries,"layout":layout})
+        plans.append({**config,"feasibility_score":round(sum(scores)/len(scores)),"beginner_difficulty":"easy" if config["key"]=="easy_start" else "moderate","crop_profile_count":len(crop_summaries),"total_plants":sum(x["quantity"] for x in crop_summaries),"estimated_occupied_area_m2":layout["occupied_area_m2"],"containers_required":sum(x["quantity"] for x in crop_summaries) if request.surface!="soil" else 0,"vertical_modules_required":len(layout["vertical_modules"]),"weekly_care_minutes":round(care),"expected_first_harvest_days":first_harvest,"expected_harvest_pattern":"staggered_and_repeat" if config["key"]=="fast_harvest" else "mixed","why_it_fits":why,"adjustments":adjustments,"trade_off":trade,"crops":crop_summaries,"layout":layout,"environment":climate})
     # Report requested crops that are genuinely unsuitable and suggest alternatives.
     requested_review=[]
     for slug in request.desired_crops:
