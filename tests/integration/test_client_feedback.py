@@ -89,6 +89,6 @@ def test_weather_routes_expose_location_and_live_metrics(client, monkeypatch):
 
 
 def test_public_navigation_hides_database_catalog():
-    app_js = Path("backend/app/static/assets/app.js").read_text()
+    app_js = Path("backend/app/static/assets/app.v7.js").read_text()
     header_block = app_js[app_js.index("function header"):app_js.index("function landing")]
     assert 'data-view="plants"' not in header_block

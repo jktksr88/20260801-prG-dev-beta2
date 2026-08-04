@@ -41,9 +41,9 @@ const context = {
 
 vm.createContext(context);
 vm.runInContext(
-  fs.readFileSync('backend/app/static/assets/app.js', 'utf8'),
+  fs.readFileSync('backend/app/static/assets/app.v7.js', 'utf8'),
   context,
-  { filename: 'app.js' },
+  { filename: 'app.v7.js' },
 );
 
 if (!root.innerHTML.includes('Turn your space into')) {

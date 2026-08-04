@@ -1,8 +1,8 @@
-# GROE Beta — Render-Safe Single Runtime
+# GROE Beta v7.0.0 — Complete Client Feedback Release
 
 **GROE — Grow Resources in Omni-sustainable Environment** turns a beginner's available space and conditions into three feasible edible-garden plans.
 
-This revision is designed to remove the deployment failure that repeatedly blocked Render: **Render does not run Node, npm, TypeScript or Vite at all.**
+This release keeps the proven Python-only Render architecture and implements all six live-client feedback items in one versioned build. **Render does not run Node, npm, TypeScript or Vite.**
 
 Production uses:
 
@@ -13,7 +13,7 @@ Production uses:
 - a self-contained browser application committed under `backend/app/static/`;
 - relative `/api/v1` requests, so frontend and backend share one origin.
 
-The original React + TypeScript + Vite development source remains in `frontend/` for future development. Render does not build that directory. The production-compatible browser bundle is plain JavaScript and CSS so npm package resolution cannot stop deployment.
+The original React + TypeScript + Vite development source remains archived in `frontend/`. Render excludes that entire directory from its Docker build. The production-compatible browser bundle is plain JavaScript and CSS so npm package resolution cannot stop deployment.
 
 ## Render deployment
 
@@ -41,13 +41,32 @@ After deployment, open:
 https://YOUR-SERVICE.onrender.com/api/v1/ready
 ```
 
-Expected response:
+Expected response includes build `7.0.0`:
 
 ```json
-{"status":"ready"}
+{"status":"ready","build":"7.0.0"}
 ```
 
+For an unambiguous release check, also open `/api/v1/build`.
+
 Then open the service root URL for the GROE interface.
+
+
+## Definitive live-build check
+
+After Render reports **Live**, open:
+
+```text
+https://groe-fullstack-beta.onrender.com/api/v1/build
+```
+
+The response must be:
+
+```json
+{"service":"groe","build":"7.0.0"}
+```
+
+The website footer must also show `Beta build 7.0.0`. If either check shows an older version, Render is not serving this repository revision.
 
 ## Runtime boot order
 
@@ -136,16 +155,18 @@ uvicorn app.main:app --reload --port 8000
 
 ## Validation completed for this package
 
-- 37 automated backend, planning, spatial, weather-route, guest-diary, authentication and integration tests passed.
+- 41 automated backend, planning, spatial, weather-route, guest-diary, authentication, release-marker and integration tests passed.
 - Fresh Alembic migration completed.
 - Initial seed inserted exactly 50 profiles.
 - JavaScript syntax check passed.
 - Browser-code landing-page render passed in an isolated JavaScript runtime.
 - Live planner flow reached the API, returned three plans and rendered the SVG plan.
 - Live account registration, plan save and diary entry flow passed.
-- Root website, JavaScript, CSS, health, readiness and plant endpoints returned HTTP 200.
+- Root website, versioned JavaScript/CSS, build, health, readiness, weather and planner endpoints returned HTTP 200 in a clean local boot test.
 - Every pinned production Python package version was confirmed to exist on public PyPI.
 - Dockerfile contains no Node or npm stage.
+- Production HTML loads only `/assets/app.v7.js` and `/assets/styles.v7.css`.
+- `/api/v1/build` and the `X-GROE-Build` response header identify the running release as `7.0.0`.
 
 ## Important data note
 
